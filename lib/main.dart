@@ -3,14 +3,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import 'package:sqflite/sqflite.dart' as sqflite;              // ✅ Android/iOS factory
-import 'package:sqflite_common/sqflite.dart' as common;       // ✅ global databaseFactory used by your db.dart
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';         // ✅ desktop
+import 'package:sqflite/sqflite.dart' as sqflite; // ✅ Android/iOS factory
+import 'package:sqflite_common/sqflite.dart' as common; // ✅ global databaseFactory used by your db.dart
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // ✅ desktop
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart'; // ✅ web
 
 import 'data/db.dart';
 import 'data/models.dart';
 import 'settings/target_settings.dart';
+import 'settings/retention_settings.dart';
 
 const bool kResetOnStartup = false;
 
@@ -68,7 +69,12 @@ class _InitGateState extends State<InitGate> {
         await TargetSettings.resetAllTargets();
       }
 
+      // Ensure DB open
       await AppDb.instance.db;
+
+      // ✅ Auto cleanup based on retention setting
+      final days = await RetentionSettings.getRetentionDays();
+      await AppDb.instance.purgeDataOlderThanDays(days);
     } catch (e, st) {
       throw Exception('$e\n\n$st');
     }
@@ -138,6 +144,52 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.calendar_month), label: 'History'),
         ],
       ),
+    );
+  }
+}
+
+// ---------------- Retention dialog ----------------
+
+Future<void> editRetentionDaysDialog(BuildContext context) async {
+  final current = await RetentionSettings.getRetentionDays();
+  final ctrl = TextEditingController(text: current.toString());
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Data retention'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('How many days should the app keep your history?'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Days to keep',
+              helperText: 'Min 7, max 3650',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+      ],
+    ),
+  );
+
+  if (ok != true) return;
+
+  final days = int.tryParse(ctrl.text.trim()) ?? current;
+  await RetentionSettings.setRetentionDays(days);
+
+  final deleted = await AppDb.instance.purgeDataOlderThanDays(days);
+
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Saved. Deleted $deleted old entries.')),
     );
   }
 }
@@ -369,156 +421,159 @@ class _TodayPageState extends State<TodayPage> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (ctx) {
         Food? selected;
         final gramsCtrl = TextEditingController(text: '100');
         final searchCtrl = TextEditingController();
 
-        // ✅ NEW fields
         String selectedLabel = 'Breakfast';
         TimeOfDay selectedTime = TimeOfDay.now();
 
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-          ),
-          child: StatefulBuilder(
-            builder: (ctx, setInner) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: StatefulBuilder(
+              builder: (ctx, setInner) {
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Expanded(
-                        child: Text('Add what you ate', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Add what you ate',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                        ],
                       ),
-                      IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
-                    ],
-                  ),
-                  TextField(
-                    controller: searchCtrl,
-                    decoration: const InputDecoration(labelText: 'Search food', prefixIcon: Icon(Icons.search)),
-                    onChanged: (_) => setInner(() {}),
-                  ),
-                  const SizedBox(height: 10),
-                  FutureBuilder<List<Food>>(
-                    future: AppDb.instance.getFoods(query: searchCtrl.text.trim()),
-                    builder: (ctx, snap) {
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      final list = snap.data ?? const <Food>[];
-                      if (list.isEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('No foods found. Add foods in the Foods tab first.'),
-                        );
-                      }
-                      return SizedBox(
-                        height: 220,
-                        child: ListView.builder(
-                          itemCount: list.length,
-                          itemBuilder: (_, i) {
-                            final f = list[i];
-                            final isSel = selected?.id == f.id;
-                            return ListTile(
-                              title: Text(f.name),
-                              subtitle: Text('${f.calories.toStringAsFixed(0)} kcal /100g'),
-                              trailing: isSel ? const Icon(Icons.check_circle) : null,
-                              onTap: () => setInner(() => selected = f),
+                      TextField(
+                        controller: searchCtrl,
+                        decoration: const InputDecoration(labelText: 'Search food', prefixIcon: Icon(Icons.search)),
+                        onChanged: (_) => setInner(() {}),
+                      ),
+                      const SizedBox(height: 10),
+                      FutureBuilder<List<Food>>(
+                        future: AppDb.instance.getFoods(query: searchCtrl.text.trim()),
+                        builder: (ctx, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Center(child: CircularProgressIndicator()),
                             );
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-
-                  // ✅ NEW: label dropdown
-                  DropdownButtonFormField<String>(
-                    value: selectedLabel,
-                    decoration: const InputDecoration(
-                      labelText: 'Label',
-                      prefixIcon: Icon(Icons.sell_outlined),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'Breakfast', child: Text('Breakfast')),
-                      DropdownMenuItem(value: 'Lunch', child: Text('Lunch')),
-                      DropdownMenuItem(value: 'Dinner', child: Text('Dinner')),
-                      DropdownMenuItem(value: 'Snack', child: Text('Snack')),
-                    ],
-                    onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // ✅ NEW: time picker
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Time: ${_fmtTime(selectedTime)}',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.access_time),
-                        label: const Text('Pick'),
-                        onPressed: () async {
-                          final picked = await showTimePicker(
-                            context: ctx,
-                            initialTime: selectedTime,
+                          }
+                          final list = snap.data ?? const <Food>[];
+                          if (list.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('No foods found. Add foods in the Foods tab first.'),
+                            );
+                          }
+                          return SizedBox(
+                            height: 220,
+                            child: ListView.builder(
+                              itemCount: list.length,
+                              itemBuilder: (_, i) {
+                                final f = list[i];
+                                final isSel = selected?.id == f.id;
+                                return ListTile(
+                                  title: Text(f.name),
+                                  subtitle: Text('${f.calories.toStringAsFixed(0)} kcal /100g'),
+                                  trailing: isSel ? const Icon(Icons.check_circle) : null,
+                                  onTap: () => setInner(() => selected = f),
+                                );
+                              },
+                            ),
                           );
-                          if (picked != null) setInner(() => selectedTime = picked);
                         },
                       ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: selectedLabel,
+                        decoration: const InputDecoration(
+                          labelText: 'Label',
+                          prefixIcon: Icon(Icons.sell_outlined),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Breakfast', child: Text('Breakfast')),
+                          DropdownMenuItem(value: 'Lunch', child: Text('Lunch')),
+                          DropdownMenuItem(value: 'Dinner', child: Text('Dinner')),
+                          DropdownMenuItem(value: 'Snack', child: Text('Snack')),
+                        ],
+                        onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Time: ${_fmtTime(selectedTime)}',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.access_time),
+                            label: const Text('Pick'),
+                            onPressed: () async {
+                              final picked = await showTimePicker(
+                                context: ctx,
+                                initialTime: selectedTime,
+                              );
+                              if (picked != null) setInner(() => selectedTime = picked);
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: gramsCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Grams eaten', suffixText: 'g'),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: () async {
+                          final f = selected;
+                          if (f == null) return;
+
+                          final grams = double.tryParse(gramsCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+                          if (grams <= 0) return;
+
+                          // ✅ Insert log WITH snapshot so history survives food deletion
+                          await AppDb.instance.insertLog(
+                            LogEntry(
+                              date: _date,
+                              foodId: f.id, // nullable allowed
+                              grams: grams,
+                              label: selectedLabel,
+                              time: _fmtTime(selectedTime),
+                              foodName: f.name,
+                              calories100: f.calories,
+                              protein100: f.protein,
+                              carbs100: f.carbs,
+                              fat100: f.fat,
+                            ),
+                          );
+
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) setState(() {});
+                        },
+                        child: const Text('Add'),
+                      ),
                     ],
                   ),
-
-                  const SizedBox(height: 6),
-
-                  TextField(
-                    controller: gramsCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Grams eaten', suffixText: 'g'),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  FilledButton(
-                    onPressed: () async {
-                      final f = selected;
-                      if (f == null) return;
-
-                      final grams = double.tryParse(gramsCtrl.text.trim().replaceAll(',', '.')) ?? 0;
-                      if (grams <= 0) return;
-
-                      await AppDb.instance.insertLog(
-                        LogEntry(
-                          date: _date,
-                          foodId: f.id!,
-                          grams: grams,
-                          // ✅ save new fields
-                          label: selectedLabel,
-                          time: _fmtTime(selectedTime),
-                        ),
-                      );
-
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      if (mounted) setState(() {});
-                    },
-                    child: const Text('Add'),
-                  ),
-                ],
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },
@@ -543,6 +598,14 @@ class _TodayPageState extends State<TodayPage> {
       appBar: AppBar(
         title: Text('Today ($_date)'),
         actions: [
+          IconButton(
+            tooltip: 'Data retention',
+            icon: const Icon(Icons.storage),
+            onPressed: () async {
+              await editRetentionDaysDialog(context);
+              if (mounted) setState(() {});
+            },
+          ),
           IconButton(
             tooltip: 'Default targets',
             icon: const Icon(Icons.flag),
@@ -644,11 +707,10 @@ class _TodayPageState extends State<TodayPage> {
                       final r = rows[i];
                       final logId = r['log_id'] as int;
                       final grams = (r['grams'] as num).toDouble();
-                      final name = r['name'] as String;
-                      final kcal100 = (r['calories'] as num).toDouble();
+                      final name = (r['name'] as String?) ?? 'Unknown';
+                      final kcal100 = ((r['calories'] as num?) ?? 0).toDouble();
                       final kcal = kcal100 * grams / 100.0;
 
-                      // ✅ NEW: show time + label (if present)
                       final time = (r['time'] as String?)?.trim();
                       final label = (r['label'] as String?)?.trim();
                       final metaParts = <String>[
@@ -853,6 +915,14 @@ class _HistoryPageState extends State<HistoryPage> {
       appBar: AppBar(
         title: Text('History ($_date)'),
         actions: [
+          IconButton(
+            tooltip: 'Data retention',
+            icon: const Icon(Icons.storage),
+            onPressed: () async {
+              await editRetentionDaysDialog(context);
+              if (mounted) setState(() {});
+            },
+          ),
           IconButton(
             tooltip: 'Default targets',
             icon: const Icon(Icons.flag),

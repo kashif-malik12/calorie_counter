@@ -66,8 +66,8 @@ class AppDb {
     return databaseFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        // ✅ bump version so migration runs for existing installs
-        version: 5,
+        // ✅ bump version so migration runs
+        version: 6,
         onConfigure: (db) async {
           if (!kIsWeb) {
             await db.execute('PRAGMA foreign_keys = ON;');
@@ -78,6 +78,7 @@ class AppDb {
           // Ensure base tables exist
           await _createFoodsTable(db);
           await _createLogEntriesTable(db);
+
           await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date ON log_entries(date);');
 
           await db.execute('''
@@ -90,7 +91,7 @@ class AppDb {
             );
           ''');
 
-          // ✅ NEW: add time + label columns for log_entries (safe)
+          // Older installs might not have time/label
           if (!await _hasColumn(db, 'log_entries', 'time')) {
             await db.execute("ALTER TABLE log_entries ADD COLUMN time TEXT;");
           }
@@ -98,7 +99,76 @@ class AppDb {
             await db.execute("ALTER TABLE log_entries ADD COLUMN label TEXT;");
           }
 
+          // ✅ Snapshot columns (so history survives food deletion)
+          if (!await _hasColumn(db, 'log_entries', 'food_name')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN food_name TEXT;");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'calories_100')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN calories_100 REAL;");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'protein_100')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN protein_100 REAL;");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'carbs_100')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN carbs_100 REAL;");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'fat_100')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN fat_100 REAL;");
+          }
+
           await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date_time ON log_entries(date, time);');
+
+          // ✅ IMPORTANT: old non-web schema used ON DELETE CASCADE + food_id NOT NULL.
+          // We rebuild the table once (when upgrading to v6) so:
+          // - food_id becomes nullable
+          // - FK becomes ON DELETE SET NULL (no history deletion)
+          if (!kIsWeb && oldVersion < 6) {
+            await db.execute('PRAGMA foreign_keys = OFF;');
+
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS log_entries_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                food_id INTEGER,
+                grams REAL NOT NULL,
+                time TEXT,
+                label TEXT,
+
+                food_name TEXT,
+                calories_100 REAL,
+                protein_100 REAL,
+                carbs_100 REAL,
+                fat_100 REAL,
+
+                FOREIGN KEY(food_id) REFERENCES foods(id) ON DELETE SET NULL
+              );
+            ''');
+
+            // Copy old rows and fill snapshot from foods if possible
+            await db.execute('''
+              INSERT INTO log_entries_new (
+                id, date, food_id, grams, time, label,
+                food_name, calories_100, protein_100, carbs_100, fat_100
+              )
+              SELECT
+                le.id, le.date, le.food_id, le.grams, le.time, le.label,
+                COALESCE(le.food_name, f.name) AS food_name,
+                COALESCE(le.calories_100, f.calories) AS calories_100,
+                COALESCE(le.protein_100, f.protein) AS protein_100,
+                COALESCE(le.carbs_100, f.carbs) AS carbs_100,
+                COALESCE(le.fat_100, f.fat) AS fat_100
+              FROM log_entries le
+              LEFT JOIN foods f ON f.id = le.food_id;
+            ''');
+
+            await db.execute('DROP TABLE log_entries;');
+            await db.execute('ALTER TABLE log_entries_new RENAME TO log_entries;');
+
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date ON log_entries(date);');
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date_time ON log_entries(date, time);');
+
+            await db.execute('PRAGMA foreign_keys = ON;');
+          }
         },
       ),
     );
@@ -145,25 +215,38 @@ class AppDb {
         CREATE TABLE IF NOT EXISTS log_entries (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           date TEXT NOT NULL,
-          food_id INTEGER NOT NULL,
+          food_id INTEGER,
           grams REAL NOT NULL,
           time TEXT,
-          label TEXT
+          label TEXT,
+
+          food_name TEXT,
+          calories_100 REAL,
+          protein_100 REAL,
+          carbs_100 REAL,
+          fat_100 REAL
         );
       ''');
       return;
     }
 
-    // ✅ Non-web: FK + cascade
+    // ✅ Non-web: FK with SET NULL (NOT CASCADE) + allow nullable food_id
     await db.execute('''
       CREATE TABLE IF NOT EXISTS log_entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT NOT NULL,
-        food_id INTEGER NOT NULL,
+        food_id INTEGER,
         grams REAL NOT NULL,
         time TEXT,
         label TEXT,
-        FOREIGN KEY(food_id) REFERENCES foods(id) ON DELETE CASCADE
+
+        food_name TEXT,
+        calories_100 REAL,
+        protein_100 REAL,
+        carbs_100 REAL,
+        fat_100 REAL,
+
+        FOREIGN KEY(food_id) REFERENCES foods(id) ON DELETE SET NULL
       );
     ''');
   }
@@ -183,11 +266,9 @@ class AppDb {
   Future<int> deleteFood(int id) async {
     final d = await db;
 
-    // ✅ Web: emulate ON DELETE CASCADE
-    if (kIsWeb) {
-      await d.delete('log_entries', where: 'food_id = ?', whereArgs: [id]);
-    }
-
+    // ✅ Do NOT delete log history when deleting food.
+    // - mobile FK is SET NULL
+    // - web has no FK; history still works via snapshot + LEFT JOIN
     return d.delete('foods', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -209,6 +290,48 @@ class AppDb {
 
   Future<int> insertLog(LogEntry entry) async {
     final d = await db;
+
+    // If snapshot already provided, store it as-is.
+    final hasSnap = entry.foodName != null &&
+        entry.calories100 != null &&
+        entry.protein100 != null &&
+        entry.carbs100 != null &&
+        entry.fat100 != null;
+
+    if (hasSnap) {
+      return d.insert('log_entries', entry.toMap());
+    }
+
+    // If foodId exists, fetch food and store snapshot at insert time.
+    if (entry.foodId != null) {
+      final rows = await d.query(
+        'foods',
+        where: 'id = ?',
+        whereArgs: [entry.foodId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        final f = Food.fromMap(rows.first);
+
+        final withSnap = LogEntry(
+          id: entry.id,
+          date: entry.date,
+          foodId: entry.foodId,
+          grams: entry.grams,
+          time: entry.time,
+          label: entry.label,
+          foodName: f.name,
+          calories100: f.calories,
+          protein100: f.protein,
+          carbs100: f.carbs,
+          fat100: f.fat,
+        );
+
+        return d.insert('log_entries', withSnap.toMap());
+      }
+    }
+
+    // Custom item (foodId null) or missing food row
     return d.insert('log_entries', entry.toMap());
   }
 
@@ -217,9 +340,8 @@ class AppDb {
     return d.delete('log_entries', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Returns rows joined with food data, plus:
-  /// - le.time (HH:mm)
-  /// - le.label (Breakfast/Lunch/Dinner/Snack)
+  /// Joined rows:
+  /// - uses snapshot when food deleted
   Future<List<Map<String, Object?>>> getLogRowsForDate(String date) async {
     final d = await db;
 
@@ -229,17 +351,20 @@ class AppDb {
              le.date,
              le.time,
              le.label,
-             f.id as food_id,
-             f.name,
-             f.calories,
-             f.protein,
-             f.carbs,
-             f.fat,
+
+             le.food_id as food_id,
+
+             COALESCE(le.food_name, f.name) as name,
+             COALESCE(le.calories_100, f.calories) as calories,
+             COALESCE(le.protein_100, f.protein) as protein,
+             COALESCE(le.carbs_100, f.carbs) as carbs,
+             COALESCE(le.fat_100, f.fat) as fat,
+
              f.fiber,
              f.sugar,
              f.sodium
       FROM log_entries le
-      JOIN foods f ON f.id = le.food_id
+      LEFT JOIN foods f ON f.id = le.food_id
       WHERE le.date = ?
       ORDER BY
         CASE WHEN le.time IS NULL OR le.time = '' THEN 1 ELSE 0 END,
@@ -253,19 +378,20 @@ class AppDb {
     var totals = const DayTotals();
 
     for (final r in rows) {
+      final grams = (r['grams'] as num).toDouble();
+
       final food = Food(
-        id: r['food_id'] as int,
-        name: r['name'] as String,
-        calories: (r['calories'] as num).toDouble(),
-        protein: (r['protein'] as num).toDouble(),
-        carbs: (r['carbs'] as num).toDouble(),
-        fat: (r['fat'] as num).toDouble(),
-        fiber: (r['fiber'] as num).toDouble(),
-        sugar: (r['sugar'] as num).toDouble(),
-        sodium: (r['sodium'] as num).toDouble(),
+        id: r['food_id'] as int?,
+        name: (r['name'] as String?) ?? 'Unknown',
+        calories: ((r['calories'] as num?) ?? 0).toDouble(),
+        protein: ((r['protein'] as num?) ?? 0).toDouble(),
+        carbs: ((r['carbs'] as num?) ?? 0).toDouble(),
+        fat: ((r['fat'] as num?) ?? 0).toDouble(),
+        fiber: ((r['fiber'] as num?) ?? 0).toDouble(),
+        sugar: ((r['sugar'] as num?) ?? 0).toDouble(),
+        sodium: ((r['sodium'] as num?) ?? 0).toDouble(),
       );
 
-      final grams = (r['grams'] as num).toDouble();
       totals = totals.addScaledFood(food, grams);
     }
 
@@ -322,6 +448,32 @@ class AppDb {
     await d.delete('day_targets', where: 'date = ?', whereArgs: [date]);
   }
 
+  // ---------------- RETENTION ----------------
+
+  /// Deletes log_entries and day_targets older than N days.
+  /// Dates are stored "yyyy-MM-dd", string comparison works safely.
+  Future<int> purgeDataOlderThanDays(int days) async {
+    final d = await db;
+
+    final cutoff = DateTime.now().subtract(Duration(days: days));
+    final cutoffStr =
+        '${cutoff.year.toString().padLeft(4, '0')}-${cutoff.month.toString().padLeft(2, '0')}-${cutoff.day.toString().padLeft(2, '0')}';
+
+    final deletedLogs = await d.delete(
+      'log_entries',
+      where: 'date < ?',
+      whereArgs: [cutoffStr],
+    );
+
+    await d.delete(
+      'day_targets',
+      where: 'date < ?',
+      whereArgs: [cutoffStr],
+    );
+
+    return deletedLogs;
+  }
+
   // ---------------- RESET / CLOSE ----------------
 
   Future<void> resetDb() async {
@@ -330,7 +482,7 @@ class AppDb {
     _opening = null;
     await d?.close();
 
-    // ✅ Web: deleteDatabase can be flaky depending on backend; rebuild schema
+    // ✅ Web: deleteDatabase can be flaky; rebuild schema
     if (kIsWeb) {
       final dbi = await db;
       await dbi.execute('DROP TABLE IF EXISTS log_entries;');
