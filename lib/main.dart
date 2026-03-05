@@ -1,5 +1,7 @@
 // lib/main.dart
 
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -390,8 +392,234 @@ Widget _targetsTable({required DayTotals totals, required MacroTargets targets})
 String _baseLabel(Food f) {
   final u = f.unit;
   final b = f.baseAmount;
-  // Realistic rule: g/ml => per 100, else per 1 (but we render based on baseAmount anyway)
   return 'per ${b.toStringAsFixed(b == b.roundToDouble() ? 0 : 1)} $u';
+}
+
+// ---------------- GOAL CALCULATOR ----------------
+
+class GoalCalculatorScreen extends StatefulWidget {
+  final String date; // apply for this date
+  const GoalCalculatorScreen({super.key, required this.date});
+
+  @override
+  State<GoalCalculatorScreen> createState() => _GoalCalculatorScreenState();
+}
+
+class _GoalCalculatorScreenState extends State<GoalCalculatorScreen> {
+  String sex = 'male'; // male/female
+  final ageCtrl = TextEditingController(text: '30');
+  final heightCtrl = TextEditingController(text: '175');
+  final weightCtrl = TextEditingController(text: '75');
+
+  String activity = 'moderate'; // sedentary/light/moderate/very/athlete
+  String goal = 'maintain'; // lose/maintain/gain
+  String pace = 'medium'; // slow/medium/aggressive
+
+  double _activityFactor(String a) {
+    switch (a) {
+      case 'sedentary':
+        return 1.2;
+      case 'light':
+        return 1.375;
+      case 'moderate':
+        return 1.55;
+      case 'very':
+        return 1.725;
+      case 'athlete':
+        return 1.9;
+      default:
+        return 1.55;
+    }
+  }
+
+  int _deltaForPace(String p, String g) {
+    // kcal/day
+    final base = switch (p) {
+      'slow' => 250,
+      'medium' => 500,
+      'aggressive' => 750,
+      _ => 500,
+    };
+    if (g == 'lose') return -base;
+    if (g == 'gain') return base;
+    return 0;
+  }
+
+  double _bmr({required String sex, required int age, required double cm, required double kg}) {
+    // Mifflin–St Jeor
+    final s = (sex == 'male') ? 5.0 : -161.0;
+    return (10.0 * kg) + (6.25 * cm) - (5.0 * age) + s;
+    // kcal/day
+  }
+
+  MacroTargets _macroTargetsFromCalories(int calories) {
+    // Simple default split:
+    // Protein: 25% kcal, Carbs: 45% kcal, Fat: 30% kcal
+    // Protein/Carbs = 4 kcal/g, Fat = 9 kcal/g
+    final p = (calories * 0.25 / 4).round();
+    final c = (calories * 0.45 / 4).round();
+    final f = (calories * 0.30 / 9).round();
+    return MacroTargets(calories: calories, protein: p, carbs: c, fat: f);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    int parseInt(TextEditingController c, int fallback) => int.tryParse(c.text.trim()) ?? fallback;
+    double parseDouble(TextEditingController c, double fallback) =>
+        double.tryParse(c.text.trim().replaceAll(',', '.')) ?? fallback;
+
+    final age = parseInt(ageCtrl, 30);
+    final h = parseDouble(heightCtrl, 175);
+    final w = parseDouble(weightCtrl, 75);
+
+    final bmr = _bmr(sex: sex, age: age, cm: h, kg: w);
+    final tdee = bmr * _activityFactor(activity);
+    final delta = _deltaForPace(pace, goal);
+    final targetCalories = (tdee + delta).round().clamp(800, 6000);
+
+    final targets = _macroTargetsFromCalories(targetCalories);
+
+    final calcJson = jsonEncode({
+      'sex': sex,
+      'age': age,
+      'height_cm': h,
+      'weight_kg': w,
+      'activity': activity,
+      'goal': goal,
+      'pace': pace,
+      'bmr': bmr,
+      'tdee': tdee,
+      'target_calories': targetCalories,
+    });
+
+    String fmt(double x) => x.toStringAsFixed(0);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Goal Calculator')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ListView(
+          children: [
+            const Text('Enter your details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+
+            DropdownButtonFormField<String>(
+              value: sex,
+              decoration: const InputDecoration(labelText: 'Sex'),
+              items: const [
+                DropdownMenuItem(value: 'male', child: Text('Male')),
+                DropdownMenuItem(value: 'female', child: Text('Female')),
+              ],
+              onChanged: (v) => setState(() => sex = v ?? 'male'),
+            ),
+            const SizedBox(height: 10),
+
+            TextField(
+              controller: ageCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Age'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+
+            TextField(
+              controller: heightCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Height (cm)'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+
+            TextField(
+              controller: weightCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Weight (kg)'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+
+            DropdownButtonFormField<String>(
+              value: activity,
+              decoration: const InputDecoration(labelText: 'Activity level'),
+              items: const [
+                DropdownMenuItem(value: 'sedentary', child: Text('Sedentary')),
+                DropdownMenuItem(value: 'light', child: Text('Light')),
+                DropdownMenuItem(value: 'moderate', child: Text('Moderate')),
+                DropdownMenuItem(value: 'very', child: Text('Very active')),
+                DropdownMenuItem(value: 'athlete', child: Text('Athlete')),
+              ],
+              onChanged: (v) => setState(() => activity = v ?? 'moderate'),
+            ),
+            const SizedBox(height: 10),
+
+            DropdownButtonFormField<String>(
+              value: goal,
+              decoration: const InputDecoration(labelText: 'Goal'),
+              items: const [
+                DropdownMenuItem(value: 'lose', child: Text('Lose weight')),
+                DropdownMenuItem(value: 'maintain', child: Text('Maintain')),
+                DropdownMenuItem(value: 'gain', child: Text('Gain weight')),
+              ],
+              onChanged: (v) => setState(() => goal = v ?? 'maintain'),
+            ),
+            const SizedBox(height: 10),
+
+            if (goal != 'maintain')
+              DropdownButtonFormField<String>(
+                value: pace,
+                decoration: const InputDecoration(labelText: 'Pace'),
+                items: const [
+                  DropdownMenuItem(value: 'slow', child: Text('Slow (±250 kcal/day)')),
+                  DropdownMenuItem(value: 'medium', child: Text('Medium (±500 kcal/day)')),
+                  DropdownMenuItem(value: 'aggressive', child: Text('Aggressive (±750 kcal/day)')),
+                ],
+                onChanged: (v) => setState(() => pace = v ?? 'medium'),
+              ),
+
+            const SizedBox(height: 18),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('Result', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 10),
+                    Text('BMR: ${fmt(bmr)} kcal/day'),
+                    Text('TDEE: ${fmt(tdee)} kcal/day'),
+                    const Divider(height: 24),
+                    Text('Suggested calories: $targetCalories kcal/day',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Text('Suggested macros: P ${targets.protein}g • C ${targets.carbs}g • F ${targets.fat}g'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            FilledButton.icon(
+              icon: const Icon(Icons.check),
+              label: Text('Apply to ${widget.date}'),
+              onPressed: () async {
+                await AppDb.instance.setTargetsForDate(
+                  widget.date,
+                  targets,
+                  source: 'calculator',
+                  calculatorJson: calcJson,
+                );
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Targets applied for ${widget.date}')),
+                );
+                Navigator.pop(context, true);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ---------------- TODAY ----------------
@@ -423,7 +651,63 @@ class _TodayPageState extends State<TodayPage> {
     }
   }
 
-  Future<void> _addLogEntry() async {
+  Future<void> _showAddMenu() async {
+    if (!mounted) return;
+
+    await showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            const Text('Add', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.search),
+              title: const Text('Add from foods'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _addLogEntryFromFoods();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.flash_on),
+              title: const Text('Quick entry (one-time)'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _addQuickManualEntry();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bookmark_add_outlined),
+              title: const Text('Add from templates'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _addFromTemplates();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.calculate_outlined),
+              title: const Text('Goal calculator (auto targets)'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final changed = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(builder: (_) => GoalCalculatorScreen(date: _date)),
+                );
+                if (changed == true && mounted) setState(() {});
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addLogEntryFromFoods() async {
     if (!mounted) return;
 
     await showModalBottomSheet(
@@ -489,14 +773,15 @@ class _TodayPageState extends State<TodayPage> {
                             );
                           }
                           return SizedBox(
-                            height: 220,
+                            height: 240,
                             child: ListView.builder(
                               itemCount: list.length,
                               itemBuilder: (_, i) {
                                 final f = list[i];
                                 final isSel = selected?.id == f.id;
+                                final tag = f.isSystem ? ' • System' : '';
                                 return ListTile(
-                                  title: Text(f.name),
+                                  title: Text('${f.name}$tag'),
                                   subtitle: Text('${f.calories.toStringAsFixed(0)} kcal (${_baseLabel(f)})'),
                                   trailing: isSel ? const Icon(Icons.check_circle) : null,
                                   onTap: () => setInner(() => selected = f),
@@ -545,7 +830,6 @@ class _TodayPageState extends State<TodayPage> {
                       ),
                       const SizedBox(height: 6),
 
-                      // ✅ NO unit selection here. Unit comes from the selected food.
                       TextField(
                         controller: amountCtrl,
                         keyboardType: TextInputType.number,
@@ -565,12 +849,11 @@ class _TodayPageState extends State<TodayPage> {
                           final amount = double.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? 0;
                           if (amount <= 0) return;
 
-                          // ✅ Insert log WITH snapshot so history survives food deletion
                           await AppDb.instance.insertLog(
                             LogEntry(
                               date: _date,
                               foodId: f.id,
-                              grams: amount, // amount in f.unit
+                              grams: amount,
                               unit: f.unit,
                               baseAmount: f.baseAmount,
                               label: selectedLabel,
@@ -582,6 +865,8 @@ class _TodayPageState extends State<TodayPage> {
                               protein100: f.protein,
                               carbs100: f.carbs,
                               fat100: f.fat,
+
+                              entryType: 'food',
                             ),
                           );
 
@@ -594,6 +879,275 @@ class _TodayPageState extends State<TodayPage> {
                   ),
                 );
               },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _addQuickManualEntry() async {
+    if (!mounted) return;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        final nameCtrl = TextEditingController();
+        final kcalCtrl = TextEditingController();
+        final pCtrl = TextEditingController(text: '0');
+        final cCtrl = TextEditingController(text: '0');
+        final fCtrl = TextEditingController(text: '0');
+
+        String selectedLabel = 'Breakfast';
+        TimeOfDay selectedTime = TimeOfDay.now();
+
+        double d(TextEditingController t) => double.tryParse(t.text.trim().replaceAll(',', '.')) ?? 0;
+
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: StatefulBuilder(
+              builder: (ctx, setInner) => SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Quick entry', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                        ),
+                        IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                      ],
+                    ),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(labelText: 'Name (e.g., Restaurant pasta)'),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: selectedLabel,
+                      decoration: const InputDecoration(labelText: 'Label', prefixIcon: Icon(Icons.sell_outlined)),
+                      items: const [
+                        DropdownMenuItem(value: 'Breakfast', child: Text('Breakfast')),
+                        DropdownMenuItem(value: 'Lunch', child: Text('Lunch')),
+                        DropdownMenuItem(value: 'Dinner', child: Text('Dinner')),
+                        DropdownMenuItem(value: 'Snack', child: Text('Snack')),
+                      ],
+                      onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: Text('Time: ${_fmtTime(selectedTime)}', style: const TextStyle(fontWeight: FontWeight.w600))),
+                        TextButton.icon(
+                          icon: const Icon(Icons.access_time),
+                          label: const Text('Pick'),
+                          onPressed: () async {
+                            final picked = await showTimePicker(context: ctx, initialTime: selectedTime);
+                            if (picked != null) setInner(() => selectedTime = picked);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: kcalCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Calories (kcal)'),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: pCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Protein (g)'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: cCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Carbs (g)'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: fCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Fat (g)'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      onPressed: () async {
+                        final name = nameCtrl.text.trim();
+                        final kcal = d(kcalCtrl);
+                        if (name.isEmpty || kcal <= 0) return;
+
+                        await AppDb.instance.insertManualLog(
+                          date: _date,
+                          name: name,
+                          calories: kcal,
+                          protein: d(pCtrl),
+                          carbs: d(cCtrl),
+                          fat: d(fCtrl),
+                          time: _fmtTime(selectedTime),
+                          label: selectedLabel,
+                        );
+
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) setState(() {});
+                      },
+                      child: const Text('Add'),
+                    )
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _addFromTemplates() async {
+    if (!mounted) return;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        TimeOfDay selectedTime = TimeOfDay.now();
+
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: StatefulBuilder(
+              builder: (ctx, setInner) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Add from templates', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                      ),
+                      IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: Text('Time: ${_fmtTime(selectedTime)}', style: const TextStyle(fontWeight: FontWeight.w600))),
+                      TextButton.icon(
+                        icon: const Icon(Icons.access_time),
+                        label: const Text('Pick'),
+                        onPressed: () async {
+                          final picked = await showTimePicker(context: ctx, initialTime: selectedTime);
+                          if (picked != null) setInner(() => selectedTime = picked);
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+
+                  FutureBuilder<List<MealTemplate>>(
+                    future: AppDb.instance.getMealTemplates(),
+                    builder: (_, snap) {
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      final templates = snap.data ?? const <MealTemplate>[];
+                      if (templates.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text('No templates yet. Create one in Templates screen.'),
+                              const SizedBox(height: 10),
+                              FilledButton.icon(
+                                icon: const Icon(Icons.add),
+                                label: const Text('Create template'),
+                                onPressed: () async {
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (!mounted) return;
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const TemplatesPage()),
+                                  );
+                                  if (mounted) setState(() {});
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return SizedBox(
+                        height: 320,
+                        child: ListView.builder(
+                          itemCount: templates.length,
+                          itemBuilder: (_, i) {
+                            final t = templates[i];
+                            return Card(
+                              child: ListTile(
+                                title: Text(t.name),
+                                subtitle: Text('Label: ${t.label}'),
+                                trailing: const Icon(Icons.add_circle_outline),
+                                onTap: () async {
+                                  await AppDb.instance.addTemplateToDate(
+                                    templateId: t.id!,
+                                    date: _date,
+                                    time: _fmtTime(selectedTime),
+                                    labelOverride: t.label,
+                                  );
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (mounted) setState(() {});
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.list_alt),
+                    label: const Text('Manage templates'),
+                    onPressed: () async {
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (!mounted) return;
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const TemplatesPage()));
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -644,6 +1198,17 @@ class _TodayPageState extends State<TodayPage> {
             },
           ),
           IconButton(
+            tooltip: 'Goal calculator',
+            icon: const Icon(Icons.calculate_outlined),
+            onPressed: () async {
+              final changed = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(builder: (_) => GoalCalculatorScreen(date: _date)),
+              );
+              if (changed == true && mounted) setState(() {});
+            },
+          ),
+          IconButton(
             tooltip: 'Reset to defaults for this date',
             icon: const Icon(Icons.refresh),
             onPressed: () async {
@@ -658,7 +1223,7 @@ class _TodayPageState extends State<TodayPage> {
           IconButton(onPressed: _pickDate, icon: const Icon(Icons.date_range)),
         ],
       ),
-      floatingActionButton: FloatingActionButton(onPressed: _addLogEntry, child: const Icon(Icons.add)),
+      floatingActionButton: FloatingActionButton(onPressed: _showAddMenu, child: const Icon(Icons.add)),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: FutureBuilder(
@@ -679,7 +1244,6 @@ class _TodayPageState extends State<TodayPage> {
                 const MacroTargets(calories: 2000, protein: 150, carbs: 200, fat: 70);
             final rows = (data?[2] as List<Map<String, Object?>>?) ?? const [];
 
-            // ✅ single scroll view (fixes "stuck at bottom" issue)
             return ListView(
               children: [
                 _progressBarCalories(taken: totals.calories.round(), target: targets.calories),
@@ -712,15 +1276,8 @@ class _TodayPageState extends State<TodayPage> {
                   ...rows.map((r) {
                     final logId = r['log_id'] as int;
 
-                    final amount = (r['grams'] as num).toDouble();
-                    final unit = (r['unit'] as String?)?.trim().isNotEmpty == true ? (r['unit'] as String) : 'g';
-                    final baseAmount = ((r['base_amount'] as num?) ?? 100).toDouble();
-                    final safeBase = baseAmount <= 0 ? 1.0 : baseAmount;
-
+                    final entryType = (r['entry_type'] as String?) ?? 'food';
                     final name = (r['name'] as String?) ?? 'Unknown';
-
-                    final kcalPerBase = ((r['calories'] as num?) ?? 0).toDouble();
-                    final kcal = kcalPerBase * amount / safeBase;
 
                     final time = (r['time'] as String?)?.trim();
                     final label = (r['label'] as String?)?.trim();
@@ -730,11 +1287,26 @@ class _TodayPageState extends State<TodayPage> {
                     ];
                     final meta = metaParts.join(' • ');
 
-                    final amountStr = amount.toStringAsFixed(amount == amount.roundToDouble() ? 0 : 1);
+                    String subtitle;
 
-                    final subtitle = meta.isEmpty
-                        ? '$amountStr $unit • ${kcal.toStringAsFixed(0)} kcal'
-                        : '$meta • $amountStr $unit • ${kcal.toStringAsFixed(0)} kcal';
+                    if (entryType == 'manual') {
+                      final kcal = ((r['calories'] as num?) ?? 0).toDouble();
+                      subtitle = meta.isEmpty ? '${kcal.toStringAsFixed(0)} kcal' : '$meta • ${kcal.toStringAsFixed(0)} kcal';
+                    } else {
+                      final amount = (r['grams'] as num).toDouble();
+                      final unit = (r['unit'] as String?)?.trim().isNotEmpty == true ? (r['unit'] as String) : 'g';
+                      final baseAmount = ((r['base_amount'] as num?) ?? 100).toDouble();
+                      final safeBase = baseAmount <= 0 ? 1.0 : baseAmount;
+
+                      final kcalPerBase = ((r['calories'] as num?) ?? 0).toDouble();
+                      final kcal = kcalPerBase * amount / safeBase;
+
+                      final amountStr = amount.toStringAsFixed(amount == amount.roundToDouble() ? 0 : 1);
+
+                      subtitle = meta.isEmpty
+                          ? '$amountStr $unit • ${kcal.toStringAsFixed(0)} kcal'
+                          : '$meta • $amountStr $unit • ${kcal.toStringAsFixed(0)} kcal';
+                    }
 
                     return Card(
                       child: ListTile(
@@ -754,6 +1326,307 @@ class _TodayPageState extends State<TodayPage> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+// ---------------- TEMPLATES ----------------
+
+class TemplatesPage extends StatefulWidget {
+  const TemplatesPage({super.key});
+
+  @override
+  State<TemplatesPage> createState() => _TemplatesPageState();
+}
+
+class _TemplatesPageState extends State<TemplatesPage> {
+  Future<void> _createTemplate() async {
+    final nameCtrl = TextEditingController();
+    String label = 'Breakfast';
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Create template'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: label,
+              decoration: const InputDecoration(labelText: 'Label'),
+              items: const [
+                DropdownMenuItem(value: 'Breakfast', child: Text('Breakfast')),
+                DropdownMenuItem(value: 'Lunch', child: Text('Lunch')),
+                DropdownMenuItem(value: 'Dinner', child: Text('Dinner')),
+                DropdownMenuItem(value: 'Snack', child: Text('Snack')),
+              ],
+              onChanged: (v) => label = v ?? 'Breakfast',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    final name = nameCtrl.text.trim();
+    if (name.isEmpty) return;
+
+    final id = await AppDb.instance.createMealTemplate(name: name, label: label);
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TemplateEditPage(templateId: id, templateName: name, templateLabel: label)),
+    );
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Templates')),
+      floatingActionButton: FloatingActionButton(onPressed: _createTemplate, child: const Icon(Icons.add)),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: FutureBuilder<List<MealTemplate>>(
+          future: AppDb.instance.getMealTemplates(),
+          builder: (_, snap) {
+            if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            final list = snap.data ?? const <MealTemplate>[];
+            if (list.isEmpty) return const Center(child: Text('No templates yet. Tap + to create one.'));
+            return ListView.builder(
+              itemCount: list.length,
+              itemBuilder: (_, i) {
+                final t = list[i];
+                return Card(
+                  child: ListTile(
+                    title: Text(t.name),
+                    subtitle: Text('Label: ${t.label}'),
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => TemplateEditPage(templateId: t.id!, templateName: t.name, templateLabel: t.label),
+                        ),
+                      );
+                      if (mounted) setState(() {});
+                    },
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () async {
+                        await AppDb.instance.deleteMealTemplate(t.id!);
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class TemplateEditPage extends StatefulWidget {
+  final int templateId;
+  final String templateName;
+  final String templateLabel;
+
+  const TemplateEditPage({
+    super.key,
+    required this.templateId,
+    required this.templateName,
+    required this.templateLabel,
+  });
+
+  @override
+  State<TemplateEditPage> createState() => _TemplateEditPageState();
+}
+
+class _TemplateEditPageState extends State<TemplateEditPage> {
+  String _q = '';
+
+  Future<void> _addFoodToTemplate() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        Food? selected;
+        final amountCtrl = TextEditingController(text: '1');
+        final searchCtrl = TextEditingController();
+
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: StatefulBuilder(
+              builder: (ctx, setInner) {
+                final unitSuffix = selected?.unit ?? 'g';
+
+                return SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text('Add food to template', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                          ),
+                          IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                        ],
+                      ),
+                      TextField(
+                        controller: searchCtrl,
+                        decoration: const InputDecoration(labelText: 'Search food', prefixIcon: Icon(Icons.search)),
+                        onChanged: (_) => setInner(() {}),
+                      ),
+                      const SizedBox(height: 10),
+                      FutureBuilder<List<Food>>(
+                        future: AppDb.instance.getFoods(query: searchCtrl.text.trim()),
+                        builder: (_, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          }
+                          final foods = snap.data ?? const <Food>[];
+                          if (foods.isEmpty) return const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('No foods found.'));
+                          return SizedBox(
+                            height: 240,
+                            child: ListView.builder(
+                              itemCount: foods.length,
+                              itemBuilder: (_, i) {
+                                final f = foods[i];
+                                final isSel = selected?.id == f.id;
+                                return ListTile(
+                                  title: Text(f.name),
+                                  subtitle: Text('${f.calories.toStringAsFixed(0)} kcal (${_baseLabel(f)})'),
+                                  trailing: isSel ? const Icon(Icons.check_circle) : null,
+                                  onTap: () => setInner(() => selected = f),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: amountCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Amount',
+                          suffixText: unitSuffix,
+                          helperText: selected == null ? null : 'Nutrition is ${_baseLabel(selected!)}',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: () async {
+                          final f = selected;
+                          if (f == null) return;
+
+                          final amount = double.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+                          if (amount <= 0) return;
+
+                          await AppDb.instance.addMealTemplateItem(
+                            templateId: widget.templateId,
+                            foodId: f.id!,
+                            amount: amount,
+                            unit: f.unit,
+                            baseAmount: f.baseAmount,
+                            sortOrder: 0,
+                          );
+
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) setState(() {});
+                        },
+                        child: const Text('Add to template'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.templateName),
+        actions: [
+          IconButton(
+            tooltip: 'Add to template',
+            icon: const Icon(Icons.add),
+            onPressed: _addFoodToTemplate,
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: FutureBuilder<List<MealTemplateItem>>(
+          future: AppDb.instance.getMealTemplateItems(widget.templateId),
+          builder: (_, snap) {
+            if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            final items = snap.data ?? const <MealTemplateItem>[];
+
+            return Column(
+              children: [
+                TextField(
+                  decoration: const InputDecoration(labelText: 'Search items', prefixIcon: Icon(Icons.search)),
+                  onChanged: (v) => setState(() => _q = v.trim().toLowerCase()),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: items.isEmpty
+                      ? const Center(child: Text('No items yet. Tap + to add foods.'))
+                      : ListView(
+                          children: items.where((it) {
+                            if (_q.isEmpty) return true;
+                            return it.foodId.toString().contains(_q);
+                          }).map((it) {
+                            return Card(
+                              child: ListTile(
+                                title: Text('Food ID: ${it.foodId}'),
+                                subtitle: Text('${it.amount} ${it.unit}'),
+                                // Simple MVP: we don’t edit/remove single items yet (can add later easily)
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Tip: In this MVP, template items show Food ID. Next step: join foods to show names + remove/reorder.',
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addFoodToTemplate,
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -783,14 +1656,18 @@ class _FoodsPageState extends State<FoodsPage> {
   ];
 
   double _computeBaseAmount(String unit) {
-    // Realistic rule:
-    // - g/ml => per 100
-    // - everything else => per 1
     if (unit == 'g' || unit == 'ml') return 100;
     return 1;
-  }
+    }
 
   Future<void> _openFoodForm({Food? existing}) async {
+    if (existing?.isSystem == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('System foods cannot be edited.')),
+      );
+      return;
+    }
+
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
     final calsCtrl = TextEditingController(text: (existing?.calories ?? 0).toString());
     final protCtrl = TextEditingController(text: (existing?.protein ?? 0).toString());
@@ -817,26 +1694,23 @@ class _FoodsPageState extends State<FoodsPage> {
               child: Column(
                 children: [
                   TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
-
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     value: selectedUnit,
-                    isExpanded: true, // ✅ add this
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Unit',
                       helperText: 'For g/ml values are per 100. For others values are per 1.',
-                      helperMaxLines: 2, // ✅ FIX: allow helper text to wrap
+                      helperMaxLines: 2,
                     ),
                     items: kUnits.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
                     onChanged: (v) => setInner(() => selectedUnit = v ?? 'g'),
                   ),
-
                   const SizedBox(height: 10),
                   TextField(controller: calsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Calories (kcal)')),
                   TextField(controller: protCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Protein (g)')),
                   TextField(controller: carbCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Carbs (g)')),
                   TextField(controller: fatCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fat (g)')),
-
                   const SizedBox(height: 10),
                   TextField(controller: fiberCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fiber (g)')),
                   TextField(controller: sugarCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sugar (g)')),
@@ -867,6 +1741,8 @@ class _FoodsPageState extends State<FoodsPage> {
                       sodium: parseNum(sodiumCtrl),
                       unit: selectedUnit,
                       baseAmount: _computeBaseAmount(selectedUnit),
+                      isSystem: false,
+                      category: existing?.category,
                     );
 
                     if (existing == null) {
@@ -894,7 +1770,19 @@ class _FoodsPageState extends State<FoodsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Foods')),
+      appBar: AppBar(
+        title: const Text('Foods'),
+        actions: [
+          IconButton(
+            tooltip: 'Templates',
+            icon: const Icon(Icons.bookmarks_outlined),
+            onPressed: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const TemplatesPage()));
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(onPressed: () => _openFoodForm(), child: const Icon(Icons.add)),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -921,18 +1809,29 @@ class _FoodsPageState extends State<FoodsPage> {
 
                       return Card(
                         child: ListTile(
-                          title: Text(f.name),
+                          title: Row(
+                            children: [
+                              Expanded(child: Text(f.name)),
+                              if (f.isSystem)
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 6),
+                                  child: Icon(Icons.lock_outline, size: 18),
+                                ),
+                            ],
+                          ),
                           subtitle: Text(
                             '${f.calories.toStringAsFixed(0)} kcal • P ${f.protein}g • C ${f.carbs}g • F ${f.fat}g ($baseStr)',
                           ),
                           onTap: () => _openFoodForm(existing: f),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () async {
-                              await AppDb.instance.deleteFood(f.id!);
-                              if (mounted) setState(() {});
-                            },
-                          ),
+                          trailing: f.isSystem
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: () async {
+                                    await AppDb.instance.deleteFood(f.id!);
+                                    if (mounted) setState(() {});
+                                  },
+                                ),
                         ),
                       );
                     },
@@ -1002,6 +1901,17 @@ class _HistoryPageState extends State<HistoryPage> {
             },
           ),
           IconButton(
+            tooltip: 'Goal calculator',
+            icon: const Icon(Icons.calculate_outlined),
+            onPressed: () async {
+              final changed = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(builder: (_) => GoalCalculatorScreen(date: _date)),
+              );
+              if (changed == true && mounted) setState(() {});
+            },
+          ),
+          IconButton(
             tooltip: 'Reset to defaults for this date',
             icon: const Icon(Icons.refresh),
             onPressed: () async {
@@ -1055,15 +1965,8 @@ class _HistoryPageState extends State<HistoryPage> {
                   ...rows.map((r) {
                     final logId = r['log_id'] as int;
 
-                    final amount = (r['grams'] as num).toDouble();
-                    final unit = (r['unit'] as String?)?.trim().isNotEmpty == true ? (r['unit'] as String) : 'g';
-                    final baseAmount = ((r['base_amount'] as num?) ?? 100).toDouble();
-                    final safeBase = baseAmount <= 0 ? 1.0 : baseAmount;
-
+                    final entryType = (r['entry_type'] as String?) ?? 'food';
                     final name = (r['name'] as String?) ?? 'Unknown';
-
-                    final kcalPerBase = ((r['calories'] as num?) ?? 0).toDouble();
-                    final kcal = kcalPerBase * amount / safeBase;
 
                     final time = (r['time'] as String?)?.trim();
                     final label = (r['label'] as String?)?.trim();
@@ -1073,11 +1976,26 @@ class _HistoryPageState extends State<HistoryPage> {
                     ];
                     final meta = metaParts.join(' • ');
 
-                    final amountStr = amount.toStringAsFixed(amount == amount.roundToDouble() ? 0 : 1);
+                    String subtitle;
 
-                    final subtitle = meta.isEmpty
-                        ? '$amountStr $unit • ${kcal.toStringAsFixed(0)} kcal'
-                        : '$meta • $amountStr $unit • ${kcal.toStringAsFixed(0)} kcal';
+                    if (entryType == 'manual') {
+                      final kcal = ((r['calories'] as num?) ?? 0).toDouble();
+                      subtitle = meta.isEmpty ? '${kcal.toStringAsFixed(0)} kcal' : '$meta • ${kcal.toStringAsFixed(0)} kcal';
+                    } else {
+                      final amount = (r['grams'] as num).toDouble();
+                      final unit = (r['unit'] as String?)?.trim().isNotEmpty == true ? (r['unit'] as String) : 'g';
+                      final baseAmount = ((r['base_amount'] as num?) ?? 100).toDouble();
+                      final safeBase = baseAmount <= 0 ? 1.0 : baseAmount;
+
+                      final kcalPerBase = ((r['calories'] as num?) ?? 0).toDouble();
+                      final kcal = kcalPerBase * amount / safeBase;
+
+                      final amountStr = amount.toStringAsFixed(amount == amount.roundToDouble() ? 0 : 1);
+
+                      subtitle = meta.isEmpty
+                          ? '$amountStr $unit • ${kcal.toStringAsFixed(0)} kcal'
+                          : '$meta • $amountStr $unit • ${kcal.toStringAsFixed(0)} kcal';
+                    }
 
                     return Card(
                       child: ListTile(

@@ -67,7 +67,7 @@ class AppDb {
       path,
       options: OpenDatabaseOptions(
         // ✅ bump version so migrations run
-        version: 9,
+        version: 10,
         onConfigure: (db) async {
           if (!kIsWeb) {
             await db.execute('PRAGMA foreign_keys = ON;');
@@ -80,14 +80,18 @@ class AppDb {
           await _createLogEntriesTable(db);
 
           await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date ON log_entries(date);');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date_time ON log_entries(date, time);');
 
+          // Ensure targets table exists (old versions)
           await db.execute('''
             CREATE TABLE IF NOT EXISTS day_targets (
               date TEXT PRIMARY KEY,
               calories_target INTEGER NOT NULL,
               protein_target INTEGER NOT NULL,
               carbs_target INTEGER NOT NULL,
-              fat_target INTEGER NOT NULL
+              fat_target INTEGER NOT NULL,
+              source TEXT DEFAULT 'manual',
+              calculator_json TEXT
             );
           ''');
 
@@ -99,12 +103,12 @@ class AppDb {
             await db.execute("ALTER TABLE log_entries ADD COLUMN label TEXT;");
           }
 
-          // ✅ Snapshot columns (so history survives food deletion)
+          // snapshot columns
           if (!await _hasColumn(db, 'log_entries', 'food_name')) {
             await db.execute("ALTER TABLE log_entries ADD COLUMN food_name TEXT;");
           }
           if (!await _hasColumn(db, 'log_entries', 'calories_100')) {
-            // keep legacy name; meaning now "calories per base_amount"
+            // legacy name; meaning "per base_amount"
             await db.execute("ALTER TABLE log_entries ADD COLUMN calories_100 REAL;");
           }
           if (!await _hasColumn(db, 'log_entries', 'protein_100')) {
@@ -117,7 +121,7 @@ class AppDb {
             await db.execute("ALTER TABLE log_entries ADD COLUMN fat_100 REAL;");
           }
 
-          // ✅ unit + base_amount snapshot for logs
+          // unit + base_amount snapshot
           if (!await _hasColumn(db, 'log_entries', 'unit')) {
             await db.execute("ALTER TABLE log_entries ADD COLUMN unit TEXT DEFAULT 'g';");
           }
@@ -125,33 +129,81 @@ class AppDb {
             await db.execute("ALTER TABLE log_entries ADD COLUMN base_amount REAL DEFAULT 100;");
           }
 
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date_time ON log_entries(date, time);');
+          // ✅ manual one-time entries
+          if (!await _hasColumn(db, 'log_entries', 'entry_type')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'food';");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'manual_name')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_name TEXT;");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'manual_kcal')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_kcal REAL;");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'manual_protein')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_protein REAL;");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'manual_carbs')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_carbs REAL;");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'manual_fat')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_fat REAL;");
+          }
+
+          // ---------- day_targets metadata columns ----------
+          if (!await _hasColumn(db, 'day_targets', 'source')) {
+            await db.execute("ALTER TABLE day_targets ADD COLUMN source TEXT DEFAULT 'manual';");
+          }
+          if (!await _hasColumn(db, 'day_targets', 'calculator_json')) {
+            await db.execute("ALTER TABLE day_targets ADD COLUMN calculator_json TEXT;");
+          }
 
           // ---------- foods columns ----------
-          // ✅ foods.unit (g/ml/tbsp/piece/...)
           if (!await _hasColumn(db, 'foods', 'unit')) {
             await db.execute("ALTER TABLE foods ADD COLUMN unit TEXT NOT NULL DEFAULT 'g';");
           }
-
-          // ✅ foods.base_amount (100 for g/ml, 1 for tbsp/piece/etc)
           if (!await _hasColumn(db, 'foods', 'base_amount')) {
             await db.execute("ALTER TABLE foods ADD COLUMN base_amount REAL NOT NULL DEFAULT 100;");
           }
 
-          // ✅ Fill base_amount more realistically for existing foods:
-          // - if unit is NOT g/ml => base_amount should be 1 (if it was left default 100)
-          // This is safe and makes old foods usable if you later change unit.
+          // global foods seed support
+          if (!await _hasColumn(db, 'foods', 'is_system')) {
+            await db.execute("ALTER TABLE foods ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;");
+          }
+          if (!await _hasColumn(db, 'foods', 'category')) {
+            await db.execute("ALTER TABLE foods ADD COLUMN category TEXT;");
+          }
+
+          // Fill base_amount more realistically for existing foods:
           await db.execute('''
             UPDATE foods
             SET base_amount = 1
             WHERE unit NOT IN ('g','ml') AND (base_amount IS NULL OR base_amount = 100);
           ''');
 
+          // ---------- meal templates tables ----------
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS meal_templates (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              label TEXT NOT NULL,
+              created_at TEXT NOT NULL
+            );
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS meal_template_items (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              template_id INTEGER NOT NULL,
+              food_id INTEGER NOT NULL,
+              amount REAL NOT NULL,
+              unit TEXT NOT NULL,
+              base_amount REAL NOT NULL,
+              sort_order INTEGER NOT NULL DEFAULT 0
+            );
+          ''');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_templates_label ON meal_templates(label);');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_items_template ON meal_template_items(template_id, sort_order);');
+
           // ---------- v6 legacy rebuild (kept from your old code) ----------
-          // IMPORTANT: old non-web schema used ON DELETE CASCADE + food_id NOT NULL.
-          // We rebuild the table once (when upgrading to v6) so:
-          // - food_id becomes nullable
-          // - FK becomes ON DELETE SET NULL (no history deletion)
           if (!kIsWeb && oldVersion < 6) {
             await db.execute('PRAGMA foreign_keys = OFF;');
 
@@ -172,6 +224,13 @@ class AppDb {
                 carbs_100 REAL,
                 fat_100 REAL,
 
+                entry_type TEXT NOT NULL DEFAULT 'food',
+                manual_name TEXT,
+                manual_kcal REAL,
+                manual_protein REAL,
+                manual_carbs REAL,
+                manual_fat REAL,
+
                 FOREIGN KEY(food_id) REFERENCES foods(id) ON DELETE SET NULL
               );
             ''');
@@ -179,7 +238,8 @@ class AppDb {
             await db.execute('''
               INSERT INTO log_entries_new (
                 id, date, food_id, grams, unit, base_amount, time, label,
-                food_name, calories_100, protein_100, carbs_100, fat_100
+                food_name, calories_100, protein_100, carbs_100, fat_100,
+                entry_type, manual_name, manual_kcal, manual_protein, manual_carbs, manual_fat
               )
               SELECT
                 le.id, le.date, le.food_id, le.grams,
@@ -190,7 +250,9 @@ class AppDb {
                 COALESCE(le.calories_100, f.calories) AS calories_100,
                 COALESCE(le.protein_100, f.protein) AS protein_100,
                 COALESCE(le.carbs_100, f.carbs) AS carbs_100,
-                COALESCE(le.fat_100, f.fat) AS fat_100
+                COALESCE(le.fat_100, f.fat) AS fat_100,
+                COALESCE(le.entry_type, 'food') as entry_type,
+                le.manual_name, le.manual_kcal, le.manual_protein, le.manual_carbs, le.manual_fat
               FROM log_entries le
               LEFT JOIN foods f ON f.id = le.food_id;
             ''');
@@ -221,9 +283,35 @@ class AppDb {
         calories_target INTEGER NOT NULL,
         protein_target INTEGER NOT NULL,
         carbs_target INTEGER NOT NULL,
-        fat_target INTEGER NOT NULL
+        fat_target INTEGER NOT NULL,
+        source TEXT DEFAULT 'manual',
+        calculator_json TEXT
       );
     ''');
+
+    await db.execute('''
+      CREATE TABLE meal_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        label TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    ''');
+
+    await db.execute('''
+      CREATE TABLE meal_template_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_id INTEGER NOT NULL,
+        food_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        unit TEXT NOT NULL,
+        base_amount REAL NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_templates_label ON meal_templates(label);');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_items_template ON meal_template_items(template_id, sort_order);');
   }
 
   Future<void> _createFoodsTable(Database db) async {
@@ -243,7 +331,10 @@ class AppDb {
         sodium REAL NOT NULL DEFAULT 0,
 
         unit TEXT NOT NULL DEFAULT 'g',
-        base_amount REAL NOT NULL DEFAULT 100
+        base_amount REAL NOT NULL DEFAULT 100,
+
+        is_system INTEGER NOT NULL DEFAULT 0,
+        category TEXT
       );
     ''');
   }
@@ -272,7 +363,15 @@ class AppDb {
           calories_100 REAL,
           protein_100 REAL,
           carbs_100 REAL,
-          fat_100 REAL
+          fat_100 REAL,
+
+          -- one-time manual item
+          entry_type TEXT NOT NULL DEFAULT 'food',
+          manual_name TEXT,
+          manual_kcal REAL,
+          manual_protein REAL,
+          manual_carbs REAL,
+          manual_fat REAL
         );
       ''');
       return;
@@ -297,6 +396,13 @@ class AppDb {
         protein_100 REAL,
         carbs_100 REAL,
         fat_100 REAL,
+
+        entry_type TEXT NOT NULL DEFAULT 'food',
+        manual_name TEXT,
+        manual_kcal REAL,
+        manual_protein REAL,
+        manual_carbs REAL,
+        manual_fat REAL,
 
         FOREIGN KEY(food_id) REFERENCES foods(id) ON DELETE SET NULL
       );
@@ -339,6 +445,36 @@ class AppDb {
   Future<int> insertLog(LogEntry entry) async {
     final d = await db;
 
+    // ✅ Manual one-time entry: store as-is (no food lookup)
+    if (entry.entryType == 'manual') {
+      // Ensure sane defaults
+      final e = LogEntry(
+        id: entry.id,
+        date: entry.date,
+        foodId: null,
+        grams: entry.grams <= 0 ? 1 : entry.grams,
+        unit: entry.unit.trim().isEmpty ? 'g' : entry.unit.trim(),
+        baseAmount: entry.baseAmount <= 0 ? 1 : entry.baseAmount,
+        time: entry.time,
+        label: entry.label,
+        entryType: 'manual',
+        manualName: entry.manualName?.trim().isEmpty == true ? 'Manual item' : entry.manualName?.trim(),
+        manualKcal: entry.manualKcal ?? 0,
+        manualProtein: entry.manualProtein ?? 0,
+        manualCarbs: entry.manualCarbs ?? 0,
+        manualFat: entry.manualFat ?? 0,
+        // snapshots not needed
+        foodName: null,
+        calories100: null,
+        protein100: null,
+        carbs100: null,
+        fat100: null,
+      );
+
+      return d.insert('log_entries', e.toMap());
+    }
+
+    // Food-based entry:
     final hasSnap = entry.foodName != null &&
         entry.calories100 != null &&
         entry.protein100 != null &&
@@ -367,7 +503,7 @@ class AppDb {
           foodId: entry.foodId,
           grams: entry.grams,
 
-          // ✅ snapshot unit and base amount (IMPORTANT)
+          // snapshot unit and base amount
           unit: f.unit,
           baseAmount: f.baseAmount,
 
@@ -375,11 +511,13 @@ class AppDb {
           label: entry.label,
           foodName: f.name,
 
-          // NOTE: names are legacy "calories_100" etc but meaning is "per base_amount"
+          // legacy columns (per base_amount)
           calories100: f.calories,
           protein100: f.protein,
           carbs100: f.carbs,
           fat100: f.fat,
+
+          entryType: 'food',
         );
 
         return d.insert('log_entries', withSnap.toMap());
@@ -390,6 +528,34 @@ class AppDb {
     return d.insert('log_entries', entry.toMap());
   }
 
+  Future<int> insertManualLog({
+    required String date,
+    required String name,
+    required double calories,
+    double protein = 0,
+    double carbs = 0,
+    double fat = 0,
+    String? time,
+    String? label,
+  }) async {
+    final entry = LogEntry(
+      date: date,
+      foodId: null,
+      grams: 1,
+      unit: 'g',
+      baseAmount: 1,
+      time: time,
+      label: label,
+      entryType: 'manual',
+      manualName: name,
+      manualKcal: calories,
+      manualProtein: protein,
+      manualCarbs: carbs,
+      manualFat: fat,
+    );
+    return insertLog(entry);
+  }
+
   Future<int> deleteLog(int id) async {
     final d = await db;
     return d.delete('log_entries', where: 'id = ?', whereArgs: [id]);
@@ -397,31 +563,57 @@ class AppDb {
 
   /// Joined rows:
   /// - uses snapshot when food deleted
+  /// - supports manual one-time items
   Future<List<Map<String, Object?>>> getLogRowsForDate(String date) async {
     final d = await db;
 
     return d.rawQuery('''
-      SELECT le.id as log_id,
-             le.grams,
-             COALESCE(le.unit, f.unit, 'g') as unit,
-             COALESCE(le.base_amount, f.base_amount, 100) as base_amount,
-             le.date,
-             le.time,
-             le.label,
+      SELECT
+        le.id as log_id,
+        le.grams,
+        COALESCE(le.unit, f.unit, 'g') as unit,
+        COALESCE(le.base_amount, f.base_amount, 100) as base_amount,
+        le.date,
+        le.time,
+        le.label,
+        le.food_id as food_id,
 
-             le.food_id as food_id,
+        le.entry_type as entry_type,
+        le.manual_name as manual_name,
+        le.manual_kcal as manual_kcal,
+        le.manual_protein as manual_protein,
+        le.manual_carbs as manual_carbs,
+        le.manual_fat as manual_fat,
 
-             COALESCE(le.food_name, f.name) as name,
+        CASE
+          WHEN le.entry_type = 'manual' THEN COALESCE(le.manual_name, 'Manual item')
+          ELSE COALESCE(le.food_name, f.name)
+        END as name,
 
-             -- per base_amount values
-             COALESCE(le.calories_100, f.calories) as calories,
-             COALESCE(le.protein_100, f.protein) as protein,
-             COALESCE(le.carbs_100, f.carbs) as carbs,
-             COALESCE(le.fat_100, f.fat) as fat,
+        CASE
+          WHEN le.entry_type = 'manual' THEN COALESCE(le.manual_kcal, 0)
+          ELSE COALESCE(le.calories_100, f.calories)
+        END as calories,
 
-             f.fiber,
-             f.sugar,
-             f.sodium
+        CASE
+          WHEN le.entry_type = 'manual' THEN COALESCE(le.manual_protein, 0)
+          ELSE COALESCE(le.protein_100, f.protein)
+        END as protein,
+
+        CASE
+          WHEN le.entry_type = 'manual' THEN COALESCE(le.manual_carbs, 0)
+          ELSE COALESCE(le.carbs_100, f.carbs)
+        END as carbs,
+
+        CASE
+          WHEN le.entry_type = 'manual' THEN COALESCE(le.manual_fat, 0)
+          ELSE COALESCE(le.fat_100, f.fat)
+        END as fat,
+
+        f.fiber,
+        f.sugar,
+        f.sodium
+
       FROM log_entries le
       LEFT JOIN foods f ON f.id = le.food_id
       WHERE le.date = ?
@@ -437,6 +629,18 @@ class AppDb {
     var totals = const DayTotals();
 
     for (final r in rows) {
+      final entryType = (r['entry_type'] as String?) ?? 'food';
+
+      if (entryType == 'manual') {
+        totals = totals.addManual(
+          caloriesAdd: ((r['calories'] as num?) ?? 0).toDouble(),
+          proteinAdd: ((r['protein'] as num?) ?? 0).toDouble(),
+          carbsAdd: ((r['carbs'] as num?) ?? 0).toDouble(),
+          fatAdd: ((r['fat'] as num?) ?? 0).toDouble(),
+        );
+        continue;
+      }
+
       final amount = (r['grams'] as num).toDouble();
       final baseAmount = ((r['base_amount'] as num?) ?? 100).toDouble();
 
@@ -456,9 +660,12 @@ class AppDb {
 
         unit: (r['unit'] as String?) ?? 'g',
         baseAmount: baseAmount,
+
+        // these may be null in join; defaults are fine
+        isSystem: false,
+        category: null,
       );
 
-      // ✅ IMPORTANT: scale by amount/baseAmount (not /100 always)
       totals = totals.addScaledFood(food, amount);
     }
 
@@ -495,7 +702,12 @@ class AppDb {
     );
   }
 
-  Future<void> setTargetsForDate(String date, MacroTargets t) async {
+  Future<void> setTargetsForDate(
+    String date,
+    MacroTargets t, {
+    String source = 'manual', // 'manual' | 'calculator'
+    String? calculatorJson,
+  }) async {
     final d = await db;
     await d.insert(
       'day_targets',
@@ -505,6 +717,8 @@ class AppDb {
         'protein_target': t.protein,
         'carbs_target': t.carbs,
         'fat_target': t.fat,
+        'source': source,
+        'calculator_json': calculatorJson,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -513,6 +727,89 @@ class AppDb {
   Future<void> clearTargetsForDate(String date) async {
     final d = await db;
     await d.delete('day_targets', where: 'date = ?', whereArgs: [date]);
+  }
+
+  // ---------------- MEAL TEMPLATES (basic helpers) ----------------
+
+  Future<int> createMealTemplate({
+    required String name,
+    required String label,
+    String? createdAt,
+  }) async {
+    final d = await db;
+    return d.insert('meal_templates', {
+      'name': name.trim(),
+      'label': label.trim(),
+      'created_at': createdAt ?? DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> deleteMealTemplate(int templateId) async {
+    final d = await db;
+    await d.delete('meal_template_items', where: 'template_id = ?', whereArgs: [templateId]);
+    await d.delete('meal_templates', where: 'id = ?', whereArgs: [templateId]);
+  }
+
+  Future<List<MealTemplate>> getMealTemplates({String? label}) async {
+    final d = await db;
+    final rows = await d.query(
+      'meal_templates',
+      where: (label == null || label.trim().isEmpty) ? null : 'label = ?',
+      whereArgs: (label == null || label.trim().isEmpty) ? null : [label.trim()],
+      orderBy: 'label COLLATE NOCASE ASC, name COLLATE NOCASE ASC',
+    );
+    return rows.map(MealTemplate.fromMap).toList();
+  }
+
+  Future<int> addMealTemplateItem({
+    required int templateId,
+    required int foodId,
+    required double amount,
+    required String unit,
+    required double baseAmount,
+    int sortOrder = 0,
+  }) async {
+    final d = await db;
+    return d.insert('meal_template_items', {
+      'template_id': templateId,
+      'food_id': foodId,
+      'amount': amount,
+      'unit': unit.trim().isEmpty ? 'g' : unit.trim(),
+      'base_amount': baseAmount,
+      'sort_order': sortOrder,
+    });
+  }
+
+  Future<List<MealTemplateItem>> getMealTemplateItems(int templateId) async {
+    final d = await db;
+    final rows = await d.query(
+      'meal_template_items',
+      where: 'template_id = ?',
+      whereArgs: [templateId],
+      orderBy: 'sort_order ASC, id ASC',
+    );
+    return rows.map(MealTemplateItem.fromMap).toList();
+  }
+
+  /// Adds all template items as log entries for the given date.
+  /// Uses current food snapshot at insert time (same as normal insertLog()).
+  Future<void> addTemplateToDate({
+    required int templateId,
+    required String date,
+    String? time,
+    String? labelOverride,
+  }) async {
+    final items = await getMealTemplateItems(templateId);
+    for (final it in items) {
+      await insertLog(LogEntry(
+        date: date,
+        foodId: it.foodId,
+        grams: it.amount,
+        time: time,
+        label: labelOverride,
+        entryType: 'food',
+      ));
+    }
   }
 
   // ---------------- RETENTION ----------------
@@ -555,6 +852,8 @@ class AppDb {
       await dbi.execute('DROP TABLE IF EXISTS log_entries;');
       await dbi.execute('DROP TABLE IF EXISTS foods;');
       await dbi.execute('DROP TABLE IF EXISTS day_targets;');
+      await dbi.execute('DROP TABLE IF EXISTS meal_template_items;');
+      await dbi.execute('DROP TABLE IF EXISTS meal_templates;');
       await _createSchema(dbi);
       return;
     }
