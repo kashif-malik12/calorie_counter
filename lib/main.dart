@@ -1,10 +1,11 @@
 // lib/main.dart
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:sqflite/sqflite.dart' as sqflite; // ✅ Android/iOS factory
-import 'package:sqflite_common/sqflite.dart' as common; // ✅ global databaseFactory used by your db.dart
+import 'package:sqflite_common/sqflite.dart' as common; // ✅ global databaseFactory used by db.dart
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // ✅ desktop
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart'; // ✅ web
 
@@ -386,6 +387,13 @@ Widget _targetsTable({required DayTotals totals, required MacroTargets targets})
   );
 }
 
+String _baseLabel(Food f) {
+  final u = f.unit;
+  final b = f.baseAmount;
+  // Realistic rule: g/ml => per 100, else per 1 (but we render based on baseAmount anyway)
+  return 'per ${b.toStringAsFixed(b == b.roundToDouble() ? 0 : 1)} $u';
+}
+
 // ---------------- TODAY ----------------
 
 class TodayPage extends StatefulWidget {
@@ -424,7 +432,7 @@ class _TodayPageState extends State<TodayPage> {
       useSafeArea: true,
       builder: (ctx) {
         Food? selected;
-        final gramsCtrl = TextEditingController(text: '100');
+        final amountCtrl = TextEditingController(text: '1');
         final searchCtrl = TextEditingController();
 
         String selectedLabel = 'Breakfast';
@@ -440,6 +448,8 @@ class _TodayPageState extends State<TodayPage> {
             ),
             child: StatefulBuilder(
               builder: (ctx, setInner) {
+                final unitSuffix = selected?.unit ?? 'g';
+
                 return SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -487,7 +497,7 @@ class _TodayPageState extends State<TodayPage> {
                                 final isSel = selected?.id == f.id;
                                 return ListTile(
                                   title: Text(f.name),
-                                  subtitle: Text('${f.calories.toStringAsFixed(0)} kcal /100g'),
+                                  subtitle: Text('${f.calories.toStringAsFixed(0)} kcal (${_baseLabel(f)})'),
                                   trailing: isSel ? const Icon(Icons.check_circle) : null,
                                   onTap: () => setInner(() => selected = f),
                                 );
@@ -534,28 +544,39 @@ class _TodayPageState extends State<TodayPage> {
                         ],
                       ),
                       const SizedBox(height: 6),
+
+                      // ✅ NO unit selection here. Unit comes from the selected food.
                       TextField(
-                        controller: gramsCtrl,
+                        controller: amountCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Grams eaten', suffixText: 'g'),
+                        decoration: InputDecoration(
+                          labelText: 'Amount eaten',
+                          suffixText: unitSuffix,
+                          helperText: selected == null ? null : 'Nutrition is ${_baseLabel(selected!)}',
+                        ),
                       ),
+
                       const SizedBox(height: 12),
                       FilledButton(
                         onPressed: () async {
                           final f = selected;
                           if (f == null) return;
 
-                          final grams = double.tryParse(gramsCtrl.text.trim().replaceAll(',', '.')) ?? 0;
-                          if (grams <= 0) return;
+                          final amount = double.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+                          if (amount <= 0) return;
 
                           // ✅ Insert log WITH snapshot so history survives food deletion
                           await AppDb.instance.insertLog(
                             LogEntry(
                               date: _date,
-                              foodId: f.id, // nullable allowed
-                              grams: grams,
+                              foodId: f.id,
+                              grams: amount, // amount in f.unit
+                              unit: f.unit,
+                              baseAmount: f.baseAmount,
                               label: selectedLabel,
                               time: _fmtTime(selectedTime),
+
+                              // snapshot nutrition per baseAmount (legacy names)
                               foodName: f.name,
                               calories100: f.calories,
                               protein100: f.protein,
@@ -640,108 +661,98 @@ class _TodayPageState extends State<TodayPage> {
       floatingActionButton: FloatingActionButton(onPressed: _addLogEntry, child: const Icon(Icons.add)),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: FutureBuilder(
-                future: Future.wait([
-                  AppDb.instance.getTotalsForDate(_date),
-                  AppDb.instance.getTargetsForDate(_date),
-                ]),
-                builder: (_, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Center(child: CircularProgressIndicator()),
+        child: FutureBuilder(
+          future: Future.wait([
+            AppDb.instance.getTotalsForDate(_date),
+            AppDb.instance.getTargetsForDate(_date),
+            AppDb.instance.getLogRowsForDate(_date),
+          ]),
+          builder: (_, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
+
+            final data = snap.data as List<Object?>?;
+            final totals = (data?[0] as DayTotals?) ?? const DayTotals();
+            final targets = (data?[1] as MacroTargets?) ??
+                const MacroTargets(calories: 2000, protein: 150, carbs: 200, fat: 70);
+            final rows = (data?[2] as List<Map<String, Object?>>?) ?? const [];
+
+            // ✅ single scroll view (fixes "stuck at bottom" issue)
+            return ListView(
+              children: [
+                _progressBarCalories(taken: totals.calories.round(), target: targets.calories),
+                const SizedBox(height: 12),
+                _targetsTable(totals: totals, targets: targets),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text('Other totals', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 10),
+                        _totRow('Fiber', '${totals.fiber.toStringAsFixed(1)} g'),
+                        _totRow('Sugar', '${totals.sugar.toStringAsFixed(1)} g'),
+                        _totRow('Sodium', '${totals.sodium.toStringAsFixed(0)} mg'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                if (rows.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('No entries yet. Tap + to add what you ate.')),
+                  )
+                else
+                  ...rows.map((r) {
+                    final logId = r['log_id'] as int;
+
+                    final amount = (r['grams'] as num).toDouble();
+                    final unit = (r['unit'] as String?)?.trim().isNotEmpty == true ? (r['unit'] as String) : 'g';
+                    final baseAmount = ((r['base_amount'] as num?) ?? 100).toDouble();
+                    final safeBase = baseAmount <= 0 ? 1.0 : baseAmount;
+
+                    final name = (r['name'] as String?) ?? 'Unknown';
+
+                    final kcalPerBase = ((r['calories'] as num?) ?? 0).toDouble();
+                    final kcal = kcalPerBase * amount / safeBase;
+
+                    final time = (r['time'] as String?)?.trim();
+                    final label = (r['label'] as String?)?.trim();
+                    final metaParts = <String>[
+                      if (time != null && time.isNotEmpty) time,
+                      if (label != null && label.isNotEmpty) label,
+                    ];
+                    final meta = metaParts.join(' • ');
+
+                    final amountStr = amount.toStringAsFixed(amount == amount.roundToDouble() ? 0 : 1);
+
+                    final subtitle = meta.isEmpty
+                        ? '$amountStr $unit • ${kcal.toStringAsFixed(0)} kcal'
+                        : '$meta • $amountStr $unit • ${kcal.toStringAsFixed(0)} kcal';
+
+                    return Card(
+                      child: ListTile(
+                        title: Text(name),
+                        subtitle: Text(subtitle),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () async {
+                            await AppDb.instance.deleteLog(logId);
+                            if (mounted) setState(() {});
+                          },
+                        ),
                       ),
                     );
-                  }
-
-                  final data = snap.data as List<Object?>?;
-                  final totals = (data?[0] as DayTotals?) ?? const DayTotals();
-                  final targets = (data?[1] as MacroTargets?) ??
-                      const MacroTargets(calories: 2000, protein: 150, carbs: 200, fat: 70);
-
-                  return Column(
-                    children: [
-                      _progressBarCalories(taken: totals.calories.round(), target: targets.calories),
-                      const SizedBox(height: 12),
-                      _targetsTable(totals: totals, targets: targets),
-                      const SizedBox(height: 12),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const Text('Other totals', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 10),
-                              _totRow('Fiber', '${totals.fiber.toStringAsFixed(1)} g'),
-                              _totRow('Sugar', '${totals.sugar.toStringAsFixed(1)} g'),
-                              _totRow('Sodium', '${totals.sodium.toStringAsFixed(0)} mg'),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  );
-                },
-              ),
-            ),
-            SliverFillRemaining(
-              hasScrollBody: true,
-              child: FutureBuilder<List<Map<String, Object?>>>(
-                future: AppDb.instance.getLogRowsForDate(_date),
-                builder: (_, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final rows = snap.data ?? const [];
-                  if (rows.isEmpty) return const Center(child: Text('No entries yet. Tap + to add what you ate.'));
-
-                  return ListView.builder(
-                    itemCount: rows.length,
-                    itemBuilder: (_, i) {
-                      final r = rows[i];
-                      final logId = r['log_id'] as int;
-                      final grams = (r['grams'] as num).toDouble();
-                      final name = (r['name'] as String?) ?? 'Unknown';
-                      final kcal100 = ((r['calories'] as num?) ?? 0).toDouble();
-                      final kcal = kcal100 * grams / 100.0;
-
-                      final time = (r['time'] as String?)?.trim();
-                      final label = (r['label'] as String?)?.trim();
-                      final metaParts = <String>[
-                        if (time != null && time.isNotEmpty) time,
-                        if (label != null && label.isNotEmpty) label,
-                      ];
-                      final meta = metaParts.join(' • ');
-
-                      final subtitle = meta.isEmpty
-                          ? '${grams.toStringAsFixed(0)} g • ${kcal.toStringAsFixed(0)} kcal'
-                          : '$meta • ${grams.toStringAsFixed(0)} g • ${kcal.toStringAsFixed(0)} kcal';
-
-                      return Card(
-                        child: ListTile(
-                          title: Text(name),
-                          subtitle: Text(subtitle),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () async {
-                              await AppDb.instance.deleteLog(logId);
-                              if (mounted) setState(() {});
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
+                  }).toList(),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -760,6 +771,25 @@ class FoodsPage extends StatefulWidget {
 class _FoodsPageState extends State<FoodsPage> {
   String _q = '';
 
+  static const kUnits = <String>[
+    'g',
+    'ml',
+    'tbsp',
+    'tsp',
+    'cup',
+    'liter',
+    'piece',
+    'slice',
+  ];
+
+  double _computeBaseAmount(String unit) {
+    // Realistic rule:
+    // - g/ml => per 100
+    // - everything else => per 1
+    if (unit == 'g' || unit == 'ml') return 100;
+    return 1;
+  }
+
   Future<void> _openFoodForm({Food? existing}) async {
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
     final calsCtrl = TextEditingController(text: (existing?.calories ?? 0).toString());
@@ -770,66 +800,93 @@ class _FoodsPageState extends State<FoodsPage> {
     final sugarCtrl = TextEditingController(text: (existing?.sugar ?? 0).toString());
     final sodiumCtrl = TextEditingController(text: (existing?.sodium ?? 0).toString());
 
+    String selectedUnit = existing?.unit ?? 'g';
+
     double parseNum(TextEditingController c) => double.tryParse(c.text.trim().replaceAll(',', '.')) ?? 0;
 
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(existing == null ? 'Add food (per 100g)' : 'Edit food (per 100g)'),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
-              TextField(controller: calsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Calories (kcal)')),
-              TextField(controller: protCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Protein (g)')),
-              TextField(controller: carbCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Carbs (g)')),
-              TextField(controller: fatCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fat (g)')),
-              const SizedBox(height: 10),
-              TextField(controller: fiberCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fiber (g)')),
-              TextField(controller: sugarCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sugar (g)')),
-              TextField(controller: sodiumCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sodium (mg)')),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) {
+          final baseAmount = _computeBaseAmount(selectedUnit);
+          final baseLabel = 'per ${baseAmount.toStringAsFixed(baseAmount == baseAmount.roundToDouble() ? 0 : 1)} $selectedUnit';
+
+          return AlertDialog(
+            title: Text(existing == null ? 'Add food ($baseLabel)' : 'Edit food ($baseLabel)'),
+            content: SingleChildScrollView(
+              child: Column(
+                children: [
+                  TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: selectedUnit,
+                    isExpanded: true, // ✅ add this
+                    decoration: const InputDecoration(
+                      labelText: 'Unit',
+                      helperText: 'For g/ml values are per 100. For others values are per 1.',
+                      helperMaxLines: 2, // ✅ FIX: allow helper text to wrap
+                    ),
+                    items: kUnits.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                    onChanged: (v) => setInner(() => selectedUnit = v ?? 'g'),
+                  ),
+
+                  const SizedBox(height: 10),
+                  TextField(controller: calsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Calories (kcal)')),
+                  TextField(controller: protCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Protein (g)')),
+                  TextField(controller: carbCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Carbs (g)')),
+                  TextField(controller: fatCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fat (g)')),
+
+                  const SizedBox(height: 10),
+                  TextField(controller: fiberCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fiber (g)')),
+                  TextField(controller: sugarCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sugar (g)')),
+                  TextField(controller: sodiumCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sodium (mg)')),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () async {
+                  try {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name is required')));
+                      return;
+                    }
+
+                    final food = Food(
+                      id: existing?.id,
+                      name: name,
+                      calories: parseNum(calsCtrl),
+                      protein: parseNum(protCtrl),
+                      carbs: parseNum(carbCtrl),
+                      fat: parseNum(fatCtrl),
+                      fiber: parseNum(fiberCtrl),
+                      sugar: parseNum(sugarCtrl),
+                      sodium: parseNum(sodiumCtrl),
+                      unit: selectedUnit,
+                      baseAmount: _computeBaseAmount(selectedUnit),
+                    );
+
+                    if (existing == null) {
+                      await AppDb.instance.insertFood(food);
+                    } else {
+                      await AppDb.instance.updateFood(food);
+                    }
+
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    if (mounted) setState(() {});
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Food saved')));
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+                  }
+                },
+                child: const Text('Save'),
+              ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () async {
-              try {
-                final name = nameCtrl.text.trim();
-                if (name.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name is required')));
-                  return;
-                }
-
-                final food = Food(
-                  id: existing?.id,
-                  name: name,
-                  calories: parseNum(calsCtrl),
-                  protein: parseNum(protCtrl),
-                  carbs: parseNum(carbCtrl),
-                  fat: parseNum(fatCtrl),
-                  fiber: parseNum(fiberCtrl),
-                  sugar: parseNum(sugarCtrl),
-                  sodium: parseNum(sodiumCtrl),
-                );
-
-                if (existing == null) {
-                  await AppDb.instance.insertFood(food);
-                } else {
-                  await AppDb.instance.updateFood(food);
-                }
-
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (mounted) setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Food saved')));
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -837,7 +894,7 @@ class _FoodsPageState extends State<FoodsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Foods (per 100g)')),
+      appBar: AppBar(title: const Text('Foods')),
       floatingActionButton: FloatingActionButton(onPressed: () => _openFoodForm(), child: const Icon(Icons.add)),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -855,14 +912,19 @@ class _FoodsPageState extends State<FoodsPage> {
                   if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                   final foods = snap.data ?? const <Food>[];
                   if (foods.isEmpty) return const Center(child: Text('No foods yet. Tap + to add.'));
+
                   return ListView.builder(
                     itemCount: foods.length,
                     itemBuilder: (_, i) {
                       final f = foods[i];
+                      final baseStr = _baseLabel(f);
+
                       return Card(
                         child: ListTile(
                           title: Text(f.name),
-                          subtitle: Text('${f.calories.toStringAsFixed(0)} kcal • P ${f.protein}g • C ${f.carbs}g • F ${f.fat}g (per 100g)'),
+                          subtitle: Text(
+                            '${f.calories.toStringAsFixed(0)} kcal • P ${f.protein}g • C ${f.carbs}g • F ${f.fat}g ($baseStr)',
+                          ),
                           onTap: () => _openFoodForm(existing: f),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline),
@@ -960,6 +1022,7 @@ class _HistoryPageState extends State<HistoryPage> {
           future: Future.wait([
             AppDb.instance.getTotalsForDate(_date),
             AppDb.instance.getTargetsForDate(_date),
+            AppDb.instance.getLogRowsForDate(_date),
           ]),
           builder: (_, snap) {
             if (snap.connectionState != ConnectionState.done) {
@@ -971,12 +1034,65 @@ class _HistoryPageState extends State<HistoryPage> {
             final totals = (data?[0] as DayTotals?) ?? const DayTotals();
             final targets = (data?[1] as MacroTargets?) ??
                 const MacroTargets(calories: 2000, protein: 150, carbs: 200, fat: 70);
+            final rows = (data?[2] as List<Map<String, Object?>>?) ?? const [];
 
-            return Column(
+            return ListView(
               children: [
                 _progressBarCalories(taken: totals.calories.round(), target: targets.calories),
                 const SizedBox(height: 12),
                 _targetsTable(totals: totals, targets: targets),
+                const SizedBox(height: 12),
+
+                const Text('Entries', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+
+                if (rows.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(child: Text('No entries for this date.')),
+                  )
+                else
+                  ...rows.map((r) {
+                    final logId = r['log_id'] as int;
+
+                    final amount = (r['grams'] as num).toDouble();
+                    final unit = (r['unit'] as String?)?.trim().isNotEmpty == true ? (r['unit'] as String) : 'g';
+                    final baseAmount = ((r['base_amount'] as num?) ?? 100).toDouble();
+                    final safeBase = baseAmount <= 0 ? 1.0 : baseAmount;
+
+                    final name = (r['name'] as String?) ?? 'Unknown';
+
+                    final kcalPerBase = ((r['calories'] as num?) ?? 0).toDouble();
+                    final kcal = kcalPerBase * amount / safeBase;
+
+                    final time = (r['time'] as String?)?.trim();
+                    final label = (r['label'] as String?)?.trim();
+                    final metaParts = <String>[
+                      if (time != null && time.isNotEmpty) time,
+                      if (label != null && label.isNotEmpty) label,
+                    ];
+                    final meta = metaParts.join(' • ');
+
+                    final amountStr = amount.toStringAsFixed(amount == amount.roundToDouble() ? 0 : 1);
+
+                    final subtitle = meta.isEmpty
+                        ? '$amountStr $unit • ${kcal.toStringAsFixed(0)} kcal'
+                        : '$meta • $amountStr $unit • ${kcal.toStringAsFixed(0)} kcal';
+
+                    return Card(
+                      child: ListTile(
+                        title: Text(name),
+                        subtitle: Text(subtitle),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () async {
+                            await AppDb.instance.deleteLog(logId);
+                            if (mounted) setState(() {});
+                          },
+                        ),
+                      ),
+                    );
+                  }).toList(),
               ],
             );
           },

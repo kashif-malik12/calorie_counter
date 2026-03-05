@@ -66,8 +66,8 @@ class AppDb {
     return databaseFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        // ✅ bump version so migration runs
-        version: 6,
+        // ✅ bump version so migrations run
+        version: 9,
         onConfigure: (db) async {
           if (!kIsWeb) {
             await db.execute('PRAGMA foreign_keys = ON;');
@@ -91,7 +91,7 @@ class AppDb {
             );
           ''');
 
-          // Older installs might not have time/label
+          // ---------- log_entries columns ----------
           if (!await _hasColumn(db, 'log_entries', 'time')) {
             await db.execute("ALTER TABLE log_entries ADD COLUMN time TEXT;");
           }
@@ -104,6 +104,7 @@ class AppDb {
             await db.execute("ALTER TABLE log_entries ADD COLUMN food_name TEXT;");
           }
           if (!await _hasColumn(db, 'log_entries', 'calories_100')) {
+            // keep legacy name; meaning now "calories per base_amount"
             await db.execute("ALTER TABLE log_entries ADD COLUMN calories_100 REAL;");
           }
           if (!await _hasColumn(db, 'log_entries', 'protein_100')) {
@@ -116,9 +117,38 @@ class AppDb {
             await db.execute("ALTER TABLE log_entries ADD COLUMN fat_100 REAL;");
           }
 
+          // ✅ unit + base_amount snapshot for logs
+          if (!await _hasColumn(db, 'log_entries', 'unit')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN unit TEXT DEFAULT 'g';");
+          }
+          if (!await _hasColumn(db, 'log_entries', 'base_amount')) {
+            await db.execute("ALTER TABLE log_entries ADD COLUMN base_amount REAL DEFAULT 100;");
+          }
+
           await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date_time ON log_entries(date, time);');
 
-          // ✅ IMPORTANT: old non-web schema used ON DELETE CASCADE + food_id NOT NULL.
+          // ---------- foods columns ----------
+          // ✅ foods.unit (g/ml/tbsp/piece/...)
+          if (!await _hasColumn(db, 'foods', 'unit')) {
+            await db.execute("ALTER TABLE foods ADD COLUMN unit TEXT NOT NULL DEFAULT 'g';");
+          }
+
+          // ✅ foods.base_amount (100 for g/ml, 1 for tbsp/piece/etc)
+          if (!await _hasColumn(db, 'foods', 'base_amount')) {
+            await db.execute("ALTER TABLE foods ADD COLUMN base_amount REAL NOT NULL DEFAULT 100;");
+          }
+
+          // ✅ Fill base_amount more realistically for existing foods:
+          // - if unit is NOT g/ml => base_amount should be 1 (if it was left default 100)
+          // This is safe and makes old foods usable if you later change unit.
+          await db.execute('''
+            UPDATE foods
+            SET base_amount = 1
+            WHERE unit NOT IN ('g','ml') AND (base_amount IS NULL OR base_amount = 100);
+          ''');
+
+          // ---------- v6 legacy rebuild (kept from your old code) ----------
+          // IMPORTANT: old non-web schema used ON DELETE CASCADE + food_id NOT NULL.
           // We rebuild the table once (when upgrading to v6) so:
           // - food_id becomes nullable
           // - FK becomes ON DELETE SET NULL (no history deletion)
@@ -131,6 +161,8 @@ class AppDb {
                 date TEXT NOT NULL,
                 food_id INTEGER,
                 grams REAL NOT NULL,
+                unit TEXT DEFAULT 'g',
+                base_amount REAL DEFAULT 100,
                 time TEXT,
                 label TEXT,
 
@@ -144,14 +176,16 @@ class AppDb {
               );
             ''');
 
-            // Copy old rows and fill snapshot from foods if possible
             await db.execute('''
               INSERT INTO log_entries_new (
-                id, date, food_id, grams, time, label,
+                id, date, food_id, grams, unit, base_amount, time, label,
                 food_name, calories_100, protein_100, carbs_100, fat_100
               )
               SELECT
-                le.id, le.date, le.food_id, le.grams, le.time, le.label,
+                le.id, le.date, le.food_id, le.grams,
+                COALESCE(le.unit, 'g') as unit,
+                COALESCE(le.base_amount, 100) as base_amount,
+                le.time, le.label,
                 COALESCE(le.food_name, f.name) AS food_name,
                 COALESCE(le.calories_100, f.calories) AS calories_100,
                 COALESCE(le.protein_100, f.protein) AS protein_100,
@@ -197,13 +231,19 @@ class AppDb {
       CREATE TABLE IF NOT EXISTS foods (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+
+        -- values stored "per base_amount of unit"
         calories REAL NOT NULL,
         protein REAL NOT NULL,
         carbs REAL NOT NULL,
         fat REAL NOT NULL,
+
         fiber REAL NOT NULL DEFAULT 0,
         sugar REAL NOT NULL DEFAULT 0,
-        sodium REAL NOT NULL DEFAULT 0
+        sodium REAL NOT NULL DEFAULT 0,
+
+        unit TEXT NOT NULL DEFAULT 'g',
+        base_amount REAL NOT NULL DEFAULT 100
       );
     ''');
   }
@@ -216,10 +256,18 @@ class AppDb {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           date TEXT NOT NULL,
           food_id INTEGER,
+
+          -- amount in the chosen unit
           grams REAL NOT NULL,
+
+          -- snapshot of unit and its base amount
+          unit TEXT DEFAULT 'g',
+          base_amount REAL DEFAULT 100,
+
           time TEXT,
           label TEXT,
 
+          -- snapshot nutrition (per base_amount)
           food_name TEXT,
           calories_100 REAL,
           protein_100 REAL,
@@ -236,7 +284,11 @@ class AppDb {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT NOT NULL,
         food_id INTEGER,
+
         grams REAL NOT NULL,
+        unit TEXT DEFAULT 'g',
+        base_amount REAL DEFAULT 100,
+
         time TEXT,
         label TEXT,
 
@@ -265,10 +317,6 @@ class AppDb {
 
   Future<int> deleteFood(int id) async {
     final d = await db;
-
-    // ✅ Do NOT delete log history when deleting food.
-    // - mobile FK is SET NULL
-    // - web has no FK; history still works via snapshot + LEFT JOIN
     return d.delete('foods', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -291,13 +339,13 @@ class AppDb {
   Future<int> insertLog(LogEntry entry) async {
     final d = await db;
 
-    // If snapshot already provided, store it as-is.
     final hasSnap = entry.foodName != null &&
         entry.calories100 != null &&
         entry.protein100 != null &&
         entry.carbs100 != null &&
         entry.fat100 != null;
 
+    // If snapshot already provided, store it as-is.
     if (hasSnap) {
       return d.insert('log_entries', entry.toMap());
     }
@@ -318,9 +366,16 @@ class AppDb {
           date: entry.date,
           foodId: entry.foodId,
           grams: entry.grams,
+
+          // ✅ snapshot unit and base amount (IMPORTANT)
+          unit: f.unit,
+          baseAmount: f.baseAmount,
+
           time: entry.time,
           label: entry.label,
           foodName: f.name,
+
+          // NOTE: names are legacy "calories_100" etc but meaning is "per base_amount"
           calories100: f.calories,
           protein100: f.protein,
           carbs100: f.carbs,
@@ -348,6 +403,8 @@ class AppDb {
     return d.rawQuery('''
       SELECT le.id as log_id,
              le.grams,
+             COALESCE(le.unit, f.unit, 'g') as unit,
+             COALESCE(le.base_amount, f.base_amount, 100) as base_amount,
              le.date,
              le.time,
              le.label,
@@ -355,6 +412,8 @@ class AppDb {
              le.food_id as food_id,
 
              COALESCE(le.food_name, f.name) as name,
+
+             -- per base_amount values
              COALESCE(le.calories_100, f.calories) as calories,
              COALESCE(le.protein_100, f.protein) as protein,
              COALESCE(le.carbs_100, f.carbs) as carbs,
@@ -378,21 +437,29 @@ class AppDb {
     var totals = const DayTotals();
 
     for (final r in rows) {
-      final grams = (r['grams'] as num).toDouble();
+      final amount = (r['grams'] as num).toDouble();
+      final baseAmount = ((r['base_amount'] as num?) ?? 100).toDouble();
 
       final food = Food(
         id: r['food_id'] as int?,
         name: (r['name'] as String?) ?? 'Unknown',
+
+        // per base amount values
         calories: ((r['calories'] as num?) ?? 0).toDouble(),
         protein: ((r['protein'] as num?) ?? 0).toDouble(),
         carbs: ((r['carbs'] as num?) ?? 0).toDouble(),
         fat: ((r['fat'] as num?) ?? 0).toDouble(),
+
         fiber: ((r['fiber'] as num?) ?? 0).toDouble(),
         sugar: ((r['sugar'] as num?) ?? 0).toDouble(),
         sodium: ((r['sodium'] as num?) ?? 0).toDouble(),
+
+        unit: (r['unit'] as String?) ?? 'g',
+        baseAmount: baseAmount,
       );
 
-      totals = totals.addScaledFood(food, grams);
+      // ✅ IMPORTANT: scale by amount/baseAmount (not /100 always)
+      totals = totals.addScaledFood(food, amount);
     }
 
     return totals;
