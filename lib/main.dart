@@ -33,7 +33,7 @@ Future<void> main() async {
   }
 
   await AppDb.instance.db;
-  await AppDb.instance.reseedSystemLibrary();
+//  await AppDb.instance.reseedSystemLibrary();
 
   runApp(const CalorieCounterApp());
 }
@@ -497,6 +497,237 @@ Future<void> editTargetsForDateOneDialog(BuildContext context, String date) asyn
   }
 }
 
+double _activityFactor(String value) {
+  switch (value) {
+    case 'Light':
+      return 1.375;
+    case 'Moderate':
+      return 1.55;
+    case 'Active':
+      return 1.725;
+    case 'Very active':
+      return 1.9;
+    case 'Sedentary':
+    default:
+      return 1.2;
+  }
+}
+
+int _goalAdjustment(String value) {
+  switch (value) {
+    case 'Lose':
+      return -400;
+    case 'Gain':
+      return 300;
+    case 'Maintain':
+    default:
+      return 0;
+  }
+}
+
+Future<void> showBmiAndCalorieToolsDialog(BuildContext context, String date) async {
+  final heightCtrl = TextEditingController(text: '170');
+  final weightCtrl = TextEditingController(text: '70');
+  final ageCtrl = TextEditingController(text: '30');
+
+  String sex = 'Male';
+  String activity = 'Moderate';
+  String goal = 'Maintain';
+
+  double parseNum(TextEditingController c) =>
+      double.tryParse(c.text.trim().replaceAll(',', '.')) ?? 0;
+
+  int parseInt(TextEditingController c) =>
+      int.tryParse(c.text.trim()) ?? 0;
+
+  await showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setInner) {
+        final heightCm = parseNum(heightCtrl);
+        final weightKg = parseNum(weightCtrl);
+        final age = parseInt(ageCtrl);
+
+        final heightM = heightCm > 0 ? heightCm / 100 : 0;
+        final bmi = (heightM > 0) ? (weightKg / (heightM * heightM)) : 0.0;
+
+        String bmiText;
+        if (bmi <= 0) {
+          bmiText = '-';
+        } else if (bmi < 18.5) {
+          bmiText = 'Underweight';
+        } else if (bmi < 25) {
+          bmiText = 'Normal';
+        } else if (bmi < 30) {
+          bmiText = 'Overweight';
+        } else {
+          bmiText = 'Obesity';
+        }
+
+        double bmr = 0;
+        if (heightCm > 0 && weightKg > 0 && age > 0) {
+          if (sex == 'Male') {
+            bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) + 5;
+          } else {
+            bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) - 161;
+          }
+        }
+
+        final tdee = bmr * _activityFactor(activity);
+        final targetCalories = (tdee + _goalAdjustment(goal)).round();
+
+        final protein =
+            goal == 'Lose' ? (weightKg * 2.0).round() : (weightKg * 1.8).round();
+        final fat = ((targetCalories * 0.25) / 9).round();
+        final carbs = (((targetCalories - (protein * 4) - (fat * 9)) / 4))
+            .clamp(0, 100000)
+            .round();
+
+        return AlertDialog(
+          title: const Text('BMI & calorie target'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: heightCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Height (cm)'),
+                  onChanged: (_) => setInner(() {}),
+                ),
+                TextField(
+                  controller: weightCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Weight (kg)'),
+                  onChanged: (_) => setInner(() {}),
+                ),
+                TextField(
+                  controller: ageCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Age'),
+                  onChanged: (_) => setInner(() {}),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: sex,
+                  decoration: const InputDecoration(labelText: 'Sex'),
+                  items: const [
+                    DropdownMenuItem(value: 'Male', child: Text('Male')),
+                    DropdownMenuItem(value: 'Female', child: Text('Female')),
+                  ],
+                  onChanged: (v) => setInner(() => sex = v ?? 'Male'),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: activity,
+                  decoration: const InputDecoration(labelText: 'Activity'),
+                  items: const [
+                    DropdownMenuItem(value: 'Sedentary', child: Text('Sedentary')),
+                    DropdownMenuItem(value: 'Light', child: Text('Light')),
+                    DropdownMenuItem(value: 'Moderate', child: Text('Moderate')),
+                    DropdownMenuItem(value: 'Active', child: Text('Active')),
+                    DropdownMenuItem(value: 'Very active', child: Text('Very active')),
+                  ],
+                  onChanged: (v) => setInner(() => activity = v ?? 'Moderate'),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: goal,
+                  decoration: const InputDecoration(labelText: 'Goal'),
+                  items: const [
+                    DropdownMenuItem(value: 'Lose', child: Text('Lose')),
+                    DropdownMenuItem(value: 'Maintain', child: Text('Maintain')),
+                    DropdownMenuItem(value: 'Gain', child: Text('Gain')),
+                  ],
+                  onChanged: (v) => setInner(() => goal = v ?? 'Maintain'),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('BMI: ${bmi > 0 ? bmi.toStringAsFixed(1) : '-'}'),
+                        Text('BMI status: $bmiText'),
+                        const SizedBox(height: 8),
+                        Text('BMR: ${bmr > 0 ? bmr.toStringAsFixed(0) : '-'} kcal'),
+                        Text('Estimated daily calories: ${targetCalories > 0 ? targetCalories : '-'} kcal'),
+                        const SizedBox(height: 8),
+                        Text('Protein target: ${protein > 0 ? protein : '-'} g'),
+                        Text('Carbs target: ${carbs >= 0 ? carbs : '-'} g'),
+                        Text('Fat target: ${fat > 0 ? fat : '-'} g'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (targetCalories <= 0) return;
+
+                await TargetSettings.setCalories(targetCalories);
+                await TargetSettings.setProtein(protein);
+                await TargetSettings.setCarbs(carbs);
+                await TargetSettings.setFat(fat);
+
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Saved as default targets')),
+                  );
+                }
+              },
+              child: const Text('Save default'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (targetCalories <= 0) return;
+
+                await AppDb.instance.setTargetsForDate(
+                  date,
+                  MacroTargets(
+                    calories: targetCalories,
+                    protein: protein,
+                    carbs: carbs,
+                    fat: fat,
+                  ),
+                  source: 'calculator',
+                  calculatorJson: jsonEncode({
+                    'height_cm': heightCm,
+                    'weight_kg': weightKg,
+                    'age': age,
+                    'sex': sex,
+                    'activity': activity,
+                    'goal': goal,
+                    'bmi': bmi,
+                    'bmr': bmr,
+                    'tdee': tdee,
+                  }),
+                );
+
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Saved targets for $date')),
+                  );
+                }
+              },
+              child: const Text('Save for this date'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
 // ---------------- TODAY ----------------
 
 class TodayPage extends StatefulWidget {
@@ -724,112 +955,161 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   Future<void> _addQuickManualEntry() async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) {
-        final nameCtrl = TextEditingController();
-        final kcalCtrl = TextEditingController();
-        final pCtrl = TextEditingController(text: '0');
-        final cCtrl = TextEditingController(text: '0');
-        final fCtrl = TextEditingController(text: '0');
+  final nameCtrl = TextEditingController();
+  final kcalCtrl = TextEditingController();
+  final pCtrl = TextEditingController(text: '0');
+  final cCtrl = TextEditingController(text: '0');
+  final fCtrl = TextEditingController(text: '0');
 
-        String selectedLabel = 'Breakfast';
-        TimeOfDay selectedTime = TimeOfDay.now();
+  String selectedLabel = 'Breakfast';
+  TimeOfDay selectedTime = TimeOfDay.now();
 
-        double d(TextEditingController t) => double.tryParse(t.text.trim().replaceAll(',', '.')) ?? 0;
+  double d(TextEditingController t) =>
+      double.tryParse(t.text.trim().replaceAll(',', '.')) ?? 0;
 
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 16,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-            ),
-            child: StatefulBuilder(
-              builder: (ctx, setInner) => SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(child: Text('Quick entry', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600))),
-                        IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
-                      ],
-                    ),
-                    TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name (e.g., Restaurant pasta)')),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: selectedLabel,
-                      decoration: const InputDecoration(labelText: 'Label', prefixIcon: Icon(Icons.sell_outlined)),
-                      items: const [
-                        DropdownMenuItem(value: 'Breakfast', child: Text('Breakfast')),
-                        DropdownMenuItem(value: 'Lunch', child: Text('Lunch')),
-                        DropdownMenuItem(value: 'Dinner', child: Text('Dinner')),
-                        DropdownMenuItem(value: 'Snack', child: Text('Snack')),
-                      ],
-                      onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: Text('Time: ${_fmtTime(selectedTime)}', style: const TextStyle(fontWeight: FontWeight.w600))),
-                        TextButton.icon(
-                          icon: const Icon(Icons.access_time),
-                          label: const Text('Pick'),
-                          onPressed: () async {
-                            final picked = await showTimePicker(context: ctx, initialTime: selectedTime);
-                            if (picked != null) setInner(() => selectedTime = picked);
-                          },
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (ctx) {
+      return SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+          ),
+          child: StatefulBuilder(
+            builder: (ctx, setInner) => SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Quick entry',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                         ),
-                      ],
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Name (e.g., Restaurant pasta)',
                     ),
-                    const SizedBox(height: 6),
-                    TextField(controller: kcalCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Calories (kcal)')),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: TextField(controller: pCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Protein (g)'))),
-                        const SizedBox(width: 10),
-                        Expanded(child: TextField(controller: cCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Carbs (g)'))),
-                        const SizedBox(width: 10),
-                        Expanded(child: TextField(controller: fCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fat (g)'))),
-                      ],
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: selectedLabel,
+                    decoration: const InputDecoration(
+                      labelText: 'Label',
+                      prefixIcon: Icon(Icons.sell_outlined),
                     ),
-                    const SizedBox(height: 14),
-                    FilledButton(
-                      onPressed: () async {
-                        final name = nameCtrl.text.trim();
-                        final kcal = d(kcalCtrl);
-                        if (name.isEmpty || kcal <= 0) return;
+                    items: const [
+                      DropdownMenuItem(value: 'Breakfast', child: Text('Breakfast')),
+                      DropdownMenuItem(value: 'Lunch', child: Text('Lunch')),
+                      DropdownMenuItem(value: 'Dinner', child: Text('Dinner')),
+                      DropdownMenuItem(value: 'Snack', child: Text('Snack')),
+                    ],
+                    onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Time: ${_fmtTime(selectedTime)}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.access_time),
+                        label: const Text('Pick'),
+                        onPressed: () async {
+                          final picked = await showTimePicker(
+                            context: ctx,
+                            initialTime: selectedTime,
+                          );
+                          if (picked != null) {
+                            setInner(() => selectedTime = picked);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: kcalCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Calories (kcal)'),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: pCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Protein (g)'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: cCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Carbs (g)'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: fCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Fat (g)'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  FilledButton(
+                    onPressed: () async {
+                      final name = nameCtrl.text.trim();
+                      final kcal = d(kcalCtrl);
+                      if (name.isEmpty || kcal <= 0) return;
 
-                        await AppDb.instance.insertManualLog(
-                          date: _date,
-                          name: name,
-                          calories: kcal,
-                          protein: d(pCtrl),
-                          carbs: d(cCtrl),
-                          fat: d(fCtrl),
-                          time: _fmtTime(selectedTime),
-                          label: selectedLabel,
-                        );
+                      await AppDb.instance.insertManualLog(
+                        date: _date,
+                        name: name,
+                        calories: kcal,
+                        protein: d(pCtrl),
+                        carbs: d(cCtrl),
+                        fat: d(fCtrl),
+                        time: _fmtTime(selectedTime),
+                        label: selectedLabel,
+                      );
 
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        if (mounted) setState(() {});
-                      },
-                      child: const Text('Add'),
-                    )
-                  ],
-                ),
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (mounted) setState(() {});
+                    },
+                    child: const Text('Add'),
+                  ),
+                ],
               ),
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Future<void> _addFromTemplates() async {
     await showModalBottomSheet(
@@ -1043,6 +1323,44 @@ class _TodayPageState extends State<TodayPage> {
 
             return ListView(
               children: [
+               Card(
+  child: Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Health tools',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.monitor_weight_outlined),
+              label: const Text('BMI & calories'),
+              onPressed: () async {
+                await showBmiAndCalorieToolsDialog(context, _date);
+                if (mounted) setState(() {});
+              },
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.flag_outlined),
+              label: const Text('Edit targets'),
+              onPressed: () async {
+                await editTargetsForDateOneDialog(context, _date);
+                if (mounted) setState(() {});
+              },
+            ),
+          ],
+        ),
+      ],
+    ),
+  ),
+),
+const SizedBox(height: 12),
                 _progressBarCalories(taken: totals.calories.round(), target: targets.calories),
                 const SizedBox(height: 12),
                 _targetsTable(totals: totals, targets: targets),
@@ -1375,6 +1693,7 @@ class _GlobalFoodsTabState extends State<GlobalFoodsTab> {
   }
 }
 
+
 class GlobalTemplatesTab extends StatefulWidget {
   const GlobalTemplatesTab({super.key});
 
@@ -1384,7 +1703,10 @@ class GlobalTemplatesTab extends StatefulWidget {
 
 class _GlobalTemplatesTabState extends State<GlobalTemplatesTab> {
   String _q = '';
+  String _labelFilter = 'All';
   late Future<List<TemplateWithTotalsPreview>> _future;
+
+  static const _labels = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Snack'];
 
   @override
   void initState() {
@@ -1393,7 +1715,10 @@ class _GlobalTemplatesTabState extends State<GlobalTemplatesTab> {
   }
 
   Future<List<TemplateWithTotalsPreview>> _loadTemplates() {
-    return AppDb.instance.getSystemMealTemplatesWithTotalsPreview(query: _q);
+    return AppDb.instance.getSystemMealTemplatesWithTotalsPreview(
+      query: _q,
+      label: _labelFilter == 'All' ? null : _labelFilter,
+    );
   }
 
   void _refresh() {
@@ -1409,11 +1734,35 @@ class _GlobalTemplatesTabState extends State<GlobalTemplatesTab> {
       child: Column(
         children: [
           TextField(
-            decoration: const InputDecoration(labelText: 'Search global templates', prefixIcon: Icon(Icons.search)),
+            decoration: const InputDecoration(
+              labelText: 'Search global templates',
+              prefixIcon: Icon(Icons.search),
+              helperText: 'Search by template name or label like Breakfast',
+            ),
             onChanged: (v) {
               _q = v;
               _refresh();
             },
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _labels.map((label) {
+                final selected = _labelFilter == label;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(label),
+                    selected: selected,
+                    onSelected: (_) {
+                      _labelFilter = label;
+                      _refresh();
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -1425,19 +1774,38 @@ class _GlobalTemplatesTabState extends State<GlobalTemplatesTab> {
                 }
 
                 final list = snap.data ?? const <TemplateWithTotalsPreview>[];
-                if (list.isEmpty) return const Center(child: Text('No global templates found.'));
+                if (list.isEmpty) {
+                  return const Center(child: Text('No global templates found.'));
+                }
 
-                return ListView.builder(
-                  itemCount: list.length,
-                  itemBuilder: (_, i) {
-                    final row = list[i];
-                    final t = row.template;
-                    final totals = row.totals;
-                    final previewText = row.itemCount > 0
-                        ? row.ingredientsPreview
-                        : 'No ingredients found. Reseed system templates once.';
+                final widgets = <Widget>[];
+                String? currentLabel;
 
-                    return Card(
+                for (final row in list) {
+                  final t = row.template;
+                  final totals = row.totals;
+                  final previewText = row.itemCount > 0
+                      ? row.ingredientsPreview
+                      : 'No ingredients found. Reseed system templates once.';
+
+                  if (currentLabel != t.label) {
+                    currentLabel = t.label;
+                    widgets.add(
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 6),
+                        child: Text(
+                          currentLabel,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  widgets.add(
+                    Card(
                       child: ListTile(
                         isThreeLine: true,
                         title: Text(
@@ -1463,15 +1831,19 @@ class _GlobalTemplatesTabState extends State<GlobalTemplatesTab> {
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => SystemTemplatePreviewPage(systemTemplateId: t.id!),
+                              builder: (_) => SystemTemplatePreviewPage(
+                                systemTemplateId: t.id!,
+                              ),
                             ),
                           );
                           if (mounted) _refresh();
                         },
                       ),
-                    );
-                  },
-                );
+                    ),
+                  );
+                }
+
+                return ListView(children: widgets);
               },
             ),
           ),
@@ -1724,7 +2096,12 @@ class _TemplatesPageState extends State<TemplatesPage> {
 class TemplateEditPage extends StatefulWidget {
   final int templateId;
   final String title;
-  const TemplateEditPage({super.key, required this.templateId, required this.title});
+
+  const TemplateEditPage({
+    super.key,
+    required this.templateId,
+    required this.title,
+  });
 
   @override
   State<TemplateEditPage> createState() => _TemplateEditPageState();
@@ -1732,15 +2109,15 @@ class TemplateEditPage extends StatefulWidget {
 
 class _TemplateEditPageState extends State<TemplateEditPage> {
   Future<void> _addFoodToTemplate() async {
+    Food? selected;
+    final amountCtrl = TextEditingController(text: '1');
+    final searchCtrl = TextEditingController();
+
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (ctx) {
-        Food? selected;
-        final amountCtrl = TextEditingController(text: '1');
-        final searchCtrl = TextEditingController();
-
         return SafeArea(
           child: Padding(
             padding: EdgeInsets.only(
@@ -1759,18 +2136,34 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
                     children: [
                       Row(
                         children: [
-                          const Expanded(child: Text('Add food', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600))),
-                          IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                          const Expanded(
+                            child: Text(
+                              'Add food',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            icon: const Icon(Icons.close),
+                          ),
                         ],
                       ),
                       TextField(
                         controller: searchCtrl,
-                        decoration: const InputDecoration(labelText: 'Search My Foods', prefixIcon: Icon(Icons.search)),
+                        decoration: const InputDecoration(
+                          labelText: 'Search My Foods',
+                          prefixIcon: Icon(Icons.search),
+                        ),
                         onChanged: (_) => setInner(() {}),
                       ),
                       const SizedBox(height: 10),
                       FutureBuilder<List<Food>>(
-                        future: AppDb.instance.getUserFoods(query: searchCtrl.text.trim()),
+                        future: AppDb.instance.getUserFoods(
+                          query: searchCtrl.text.trim(),
+                        ),
                         builder: (_, snap) {
                           if (snap.connectionState == ConnectionState.waiting) {
                             return const Padding(
@@ -1778,13 +2171,17 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
                               child: Center(child: CircularProgressIndicator()),
                             );
                           }
+
                           final foods = snap.data ?? const <Food>[];
                           if (foods.isEmpty) {
                             return const Padding(
                               padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Text('No My Foods found. Import from Global first.'),
+                              child: Text(
+                                'No My Foods found. Import from Global first.',
+                              ),
                             );
                           }
+
                           return SizedBox(
                             height: 240,
                             child: ListView.builder(
@@ -1792,11 +2189,14 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
                               itemBuilder: (_, i) {
                                 final f = foods[i];
                                 final isSel = selected?.id == f.id;
+
                                 return ListTile(
                                   isThreeLine: true,
                                   title: Text(f.name),
                                   subtitle: Text(_foodListSubtitle(f)),
-                                  trailing: isSel ? const Icon(Icons.check_circle) : null,
+                                  trailing: isSel
+                                      ? const Icon(Icons.check_circle)
+                                      : null,
                                   onTap: () => setInner(() => selected = f),
                                 );
                               },
@@ -1808,7 +2208,10 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
                       TextField(
                         controller: amountCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: InputDecoration(labelText: 'Amount', suffixText: unitSuffix),
+                        decoration: InputDecoration(
+                          labelText: 'Amount',
+                          suffixText: unitSuffix,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       FilledButton(
@@ -1816,7 +2219,10 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
                           final f = selected;
                           if (f == null) return;
 
-                          final amount = double.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+                          final amount = double.tryParse(
+                                amountCtrl.text.trim().replaceAll(',', '.'),
+                              ) ??
+                              0;
                           if (amount <= 0) return;
 
                           await AppDb.instance.addMealTemplateItem(
@@ -1854,7 +2260,10 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
-          IconButton(icon: const Icon(Icons.add), onPressed: _addFoodToTemplate),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _addFoodToTemplate,
+          ),
         ],
       ),
       body: Padding(
@@ -1862,20 +2271,59 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
         child: FutureBuilder<List<Map<String, Object?>>>(
           future: _loadJoinedItems(),
           builder: (_, snap) {
-            if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snap.hasError) {
+              return Center(child: Text('Error: ${snap.error}'));
+            }
+
             final list = snap.data ?? const [];
 
             if (list.isEmpty) {
-              return const Center(child: Text('No items yet. Tap + to add foods.'));
+              return const Center(
+                child: Text('No items yet. Tap + to add foods.'),
+              );
             }
 
             return ListView(
               children: list.map((row) {
-                final it = row['item'] as MealTemplateItem;
-                final food = row['food'] as Food?;
+                final it = MealTemplateItem.fromMap({
+                  'id': row['id'],
+                  'template_id': row['template_id'],
+                  'food_id': row['food_id'],
+                  'amount': row['amount'],
+                  'unit': row['unit'],
+                  'base_amount': row['base_amount'],
+                  'sort_order': row['sort_order'],
+                });
+
+                final hasFood = (row['food_name'] as String?) != null;
+
+                final food = hasFood
+                    ? Food(
+                        id: row['food_id'] as int?,
+                        name: (row['food_name'] as String?) ?? 'Unknown',
+                        calories: ((row['calories'] as num?) ?? 0).toDouble(),
+                        protein: ((row['protein'] as num?) ?? 0).toDouble(),
+                        carbs: ((row['carbs'] as num?) ?? 0).toDouble(),
+                        fat: ((row['fat'] as num?) ?? 0).toDouble(),
+                        fiber: 0,
+                        sugar: 0,
+                        sodium: 0,
+                        unit: (row['food_unit'] as String?) ?? 'g',
+                        baseAmount:
+                            ((row['food_base_amount'] as num?) ?? 100).toDouble(),
+                        isSystem: false,
+                        category: null,
+                      )
+                    : null;
 
                 final name = food?.name ?? 'Food #${it.foodId} (missing)';
-                final amountStr = it.amount.toStringAsFixed(it.amount == it.amount.roundToDouble() ? 0 : 1);
+                final amountStr = it.amount.toStringAsFixed(
+                  it.amount == it.amount.roundToDouble() ? 0 : 1,
+                );
 
                 final safeBase = it.baseAmount <= 0 ? 1.0 : it.baseAmount;
                 final factor = it.amount / safeBase;
@@ -1913,7 +2361,10 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton(onPressed: _addFoodToTemplate, child: const Icon(Icons.add)),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addFoodToTemplate,
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }

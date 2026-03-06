@@ -5,9 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
 
-import 'package:sqflite_common/sqlite_api.dart';
 import 'package:sqflite_common/sqflite.dart';
-import 'package:sqflite/utils/utils.dart';
 
 import '../settings/target_settings.dart';
 import 'models.dart';
@@ -126,7 +124,7 @@ class AppDb {
     if (kIsWeb) return _dbFileName;
 
     final basePath = await databaseFactory.getDatabasesPath();
-    if (basePath == null || basePath.isEmpty) return _dbFileName;
+    if (basePath.isEmpty) return _dbFileName;
     return p.join(basePath, _dbFileName);
   }
 
@@ -823,16 +821,20 @@ class AppDb {
   }
 
   Future<List<MealTemplate>> getSystemMealTemplates({String? query}) async {
-    final d = await db;
-    final q = query?.trim();
-    final rows = await d.query(
-      'meal_templates',
-      where: (q == null || q.isEmpty) ? 'is_system = 1' : 'is_system = 1 AND name LIKE ?',
-      whereArgs: (q == null || q.isEmpty) ? null : ['%$q%'],
-      orderBy: 'name COLLATE NOCASE ASC',
-    );
-    return rows.map(MealTemplate.fromMap).toList();
-  }
+  final d = await db;
+  final q = query?.trim();
+
+  final rows = await d.query(
+    'meal_templates',
+    where: (q == null || q.isEmpty)
+        ? 'is_system = 1'
+        : 'is_system = 1 AND (name LIKE ? OR label LIKE ?)',
+    whereArgs: (q == null || q.isEmpty) ? null : ['%$q%', '%$q%'],
+    orderBy: 'label COLLATE NOCASE ASC, name COLLATE NOCASE ASC',
+  );
+
+  return rows.map(MealTemplate.fromMap).toList();
+}
 
   Future<List<TemplateWithTotals>> getUserMealTemplatesWithTotals({String? label}) async {
   final d = await db;
@@ -887,9 +889,27 @@ class AppDb {
   }).toList();
 }
 
-  Future<List<TemplateWithTotals>> getSystemMealTemplatesWithTotals({String? query}) async {
+  Future<List<TemplateWithTotals>> getSystemMealTemplatesWithTotals({
+  String? query,
+  String? label,
+}) async {
   final d = await db;
   final q = query?.trim();
+  final l = label?.trim();
+
+  final args = <Object?>[];
+  final whereParts = <String>['t.is_system = 1'];
+
+  if (l != null && l.isNotEmpty) {
+    whereParts.add('t.label = ?');
+    args.add(l);
+  }
+
+  if (q != null && q.isNotEmpty) {
+    whereParts.add('(t.name LIKE ? OR t.label LIKE ?)');
+    args.add('%$q%');
+    args.add('%$q%');
+  }
 
   final rows = await d.rawQuery('''
     SELECT
@@ -910,11 +930,10 @@ class AppDb {
     FROM meal_templates t
     LEFT JOIN meal_template_items i ON i.template_id = t.id
     LEFT JOIN foods f ON f.id = i.food_id
-    WHERE t.is_system = 1
-      ${q == null || q.isEmpty ? '' : 'AND t.name LIKE ?'}
+    WHERE ${whereParts.join(' AND ')}
     GROUP BY t.id, t.name, t.label, t.created_at, t.is_system, t.system_key
-    ORDER BY t.name COLLATE NOCASE ASC
-  ''', q == null || q.isEmpty ? [] : ['%$q%']);
+    ORDER BY t.label COLLATE NOCASE ASC, t.name COLLATE NOCASE ASC
+  ''', args);
 
   return rows.map((r) {
     final template = MealTemplate.fromMap({
@@ -1000,79 +1019,96 @@ class AppDb {
     ''', [templateId]);
   }
 
-  Future<List<TemplateWithTotalsPreview>> getSystemMealTemplatesWithTotalsPreview({String? query}) async {
-    final d = await db;
-    final q = query?.trim();
+  Future<List<TemplateWithTotalsPreview>> getSystemMealTemplatesWithTotalsPreview({
+  String? query,
+  String? label,
+}) async {
+  final d = await db;
+  final q = query?.trim();
+  final l = label?.trim();
 
-    final rows = await d.rawQuery('''
-      SELECT
-        t.id,
-        t.name,
-        t.label,
-        t.created_at,
-        t.is_system,
-        t.system_key,
+  final args = <Object?>[];
+  final whereParts = <String>['t.is_system = 1'];
 
-        COALESCE(SUM(COALESCE(f.calories, 0) * i.amount / CASE WHEN i.base_amount <= 0 THEN 1 ELSE i.base_amount END), 0) as total_calories,
-        COALESCE(SUM(COALESCE(f.protein, 0) * i.amount / CASE WHEN i.base_amount <= 0 THEN 1 ELSE i.base_amount END), 0) as total_protein,
-        COALESCE(SUM(COALESCE(f.carbs, 0) * i.amount / CASE WHEN i.base_amount <= 0 THEN 1 ELSE i.base_amount END), 0) as total_carbs,
-        COALESCE(SUM(COALESCE(f.fat, 0) * i.amount / CASE WHEN i.base_amount <= 0 THEN 1 ELSE i.base_amount END), 0) as total_fat,
-        COUNT(i.id) as item_count,
-        COALESCE(GROUP_CONCAT(
-          CASE
-            WHEN i.id IN (
-              SELECT ii.id
-              FROM meal_template_items ii
-              WHERE ii.template_id = t.id
-              ORDER BY ii.sort_order ASC, ii.id ASC
-              LIMIT 3
-            )
-            THEN
-              printf('%s %s %s',
-                CASE
-                  WHEN CAST(i.amount AS INTEGER) = i.amount THEN CAST(i.amount AS INTEGER)
-                  ELSE ROUND(i.amount, 1)
-                END,
-                COALESCE(NULLIF(i.unit, ''), COALESCE(f.unit, 'g')),
-                COALESCE(f.name, 'Unknown')
-              )
-          END,
-          ' • '
-        ), 'No items') as ingredients_preview
-      FROM meal_templates t
-      LEFT JOIN meal_template_items i ON i.template_id = t.id
-      LEFT JOIN foods f ON f.id = i.food_id
-      WHERE t.is_system = 1
-        ${q == null || q.isEmpty ? '' : 'AND t.name LIKE ?'}
-      GROUP BY t.id, t.name, t.label, t.created_at, t.is_system, t.system_key
-      ORDER BY t.name COLLATE NOCASE ASC
-    ''', q == null || q.isEmpty ? [] : ['%$q%']);
-
-    return rows.map((r) {
-      final template = MealTemplate.fromMap({
-        'id': r['id'],
-        'name': r['name'],
-        'label': r['label'],
-        'created_at': r['created_at'],
-        'is_system': r['is_system'],
-        'system_key': r['system_key'],
-      });
-
-      final totals = DayTotals(
-        calories: ((r['total_calories'] as num?) ?? 0).toDouble(),
-        protein: ((r['total_protein'] as num?) ?? 0).toDouble(),
-        carbs: ((r['total_carbs'] as num?) ?? 0).toDouble(),
-        fat: ((r['total_fat'] as num?) ?? 0).toDouble(),
-      );
-
-      return TemplateWithTotalsPreview(
-        template: template,
-        totals: totals,
-        ingredientsPreview: ((r['ingredients_preview'] as String?) ?? 'No items').trim(),
-        itemCount: ((r['item_count'] as num?) ?? 0).toInt(),
-      );
-    }).toList();
+  if (l != null && l.isNotEmpty) {
+    whereParts.add('t.label = ?');
+    args.add(l);
   }
+
+  if (q != null && q.isNotEmpty) {
+    whereParts.add('(t.name LIKE ? OR t.label LIKE ?)');
+    args.add('%$q%');
+    args.add('%$q%');
+  }
+
+  final rows = await d.rawQuery('''
+    SELECT
+      t.id,
+      t.name,
+      t.label,
+      t.created_at,
+      t.is_system,
+      t.system_key,
+
+      COALESCE(SUM(COALESCE(f.calories, 0) * i.amount / CASE WHEN i.base_amount <= 0 THEN 1 ELSE i.base_amount END), 0) as total_calories,
+      COALESCE(SUM(COALESCE(f.protein, 0) * i.amount / CASE WHEN i.base_amount <= 0 THEN 1 ELSE i.base_amount END), 0) as total_protein,
+      COALESCE(SUM(COALESCE(f.carbs, 0) * i.amount / CASE WHEN i.base_amount <= 0 THEN 1 ELSE i.base_amount END), 0) as total_carbs,
+      COALESCE(SUM(COALESCE(f.fat, 0) * i.amount / CASE WHEN i.base_amount <= 0 THEN 1 ELSE i.base_amount END), 0) as total_fat,
+      COUNT(i.id) as item_count,
+      COALESCE(GROUP_CONCAT(
+        CASE
+          WHEN i.id IN (
+            SELECT ii.id
+            FROM meal_template_items ii
+            WHERE ii.template_id = t.id
+            ORDER BY ii.sort_order ASC, ii.id ASC
+            LIMIT 3
+          )
+          THEN
+            printf('%s %s %s',
+              CASE
+                WHEN CAST(i.amount AS INTEGER) = i.amount THEN CAST(i.amount AS INTEGER)
+                ELSE ROUND(i.amount, 1)
+              END,
+              COALESCE(NULLIF(i.unit, ''), COALESCE(f.unit, 'g')),
+              COALESCE(f.name, 'Unknown')
+            )
+        END,
+        ' • '
+      ), 'No items') as ingredients_preview
+    FROM meal_templates t
+    LEFT JOIN meal_template_items i ON i.template_id = t.id
+    LEFT JOIN foods f ON f.id = i.food_id
+    WHERE ${whereParts.join(' AND ')}
+    GROUP BY t.id, t.name, t.label, t.created_at, t.is_system, t.system_key
+    ORDER BY t.label COLLATE NOCASE ASC, t.name COLLATE NOCASE ASC
+  ''', args);
+
+  return rows.map((r) {
+    final template = MealTemplate.fromMap({
+      'id': r['id'],
+      'name': r['name'],
+      'label': r['label'],
+      'created_at': r['created_at'],
+      'is_system': r['is_system'],
+      'system_key': r['system_key'],
+    });
+
+    final totals = DayTotals(
+      calories: ((r['total_calories'] as num?) ?? 0).toDouble(),
+      protein: ((r['total_protein'] as num?) ?? 0).toDouble(),
+      carbs: ((r['total_carbs'] as num?) ?? 0).toDouble(),
+      fat: ((r['total_fat'] as num?) ?? 0).toDouble(),
+    );
+
+    return TemplateWithTotalsPreview(
+      template: template,
+      totals: totals,
+      ingredientsPreview: ((r['ingredients_preview'] as String?) ?? 'No items').trim(),
+      itemCount: ((r['item_count'] as num?) ?? 0).toInt(),
+    );
+  }).toList();
+}
 
   Future<SystemTemplatePreview> getSystemTemplatePreview(int systemTemplateId) async {
     final d = await db;
@@ -1182,23 +1218,59 @@ class AppDb {
   }
 
   Future<void> addTemplateToDate({
-    required int templateId,
-    required String date,
-    String? time,
-    String? labelOverride,
-  }) async {
-    final items = await getMealTemplateItems(templateId);
-    for (final it in items) {
-      await insertLog(LogEntry(
-        date: date,
-        foodId: it.foodId,
-        grams: it.amount,
-        time: time,
-        label: labelOverride,
-        entryType: 'food',
-      ));
-    }
+  required int templateId,
+  required String date,
+  String? time,
+  String? labelOverride,
+}) async {
+  final d = await db;
+
+  final templateRows = await d.query(
+    'meal_templates',
+    where: 'id = ?',
+    whereArgs: [templateId],
+    limit: 1,
+  );
+
+  if (templateRows.isEmpty) {
+    throw Exception('Template not found');
   }
+
+  final template = MealTemplate.fromMap(templateRows.first);
+  final joined = await getMealTemplateItemsJoined(templateId);
+
+  if (joined.isEmpty) return;
+
+  double calories = 0;
+  double protein = 0;
+  double carbs = 0;
+  double fat = 0;
+
+  for (final row in joined) {
+    final amount = ((row['amount'] as num?) ?? 0).toDouble();
+    final baseAmount = ((row['base_amount'] as num?) ?? 1).toDouble();
+    final safeBase = baseAmount <= 0 ? 1.0 : baseAmount;
+    final factor = amount / safeBase;
+
+    calories += (((row['calories'] as num?) ?? 0).toDouble()) * factor;
+    protein += (((row['protein'] as num?) ?? 0).toDouble()) * factor;
+    carbs += (((row['carbs'] as num?) ?? 0).toDouble()) * factor;
+    fat += (((row['fat'] as num?) ?? 0).toDouble()) * factor;
+  }
+
+  await insertManualLog(
+    date: date,
+    name: template.name,
+    calories: calories,
+    protein: protein,
+    carbs: carbs,
+    fat: fat,
+    time: time,
+    label: (labelOverride?.trim().isNotEmpty == true)
+        ? labelOverride!.trim()
+        : template.label,
+  );
+}
   Future<void> reseedSystemTemplates() async {
   final d = await db;
 

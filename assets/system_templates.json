@@ -4,26 +4,10 @@
     "name": "Protein Oats Bowl",
     "default_label": "Breakfast",
     "items": [
-      {
-        "food_system_key": "oats",
-        "amount": 80,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "milk_whole",
-        "amount": 200,
-        "unit": "ml"
-      },
-      {
-        "food_system_key": "protein_powder",
-        "amount": 30,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "banana",
-        "amount": 100,
-        "unit": "g"
-      }
+      { "food_system_key": "oats", "amount": 80, "unit": "g" },
+      { "food_system_key": "milk_whole", "amount": 200, "unit": "ml" },
+      { "food_system_key": "protein_powder", "amount": 30, "unit": "g" },
+      { "food_system_key": "banana", "amount": 100, "unit": "g" }
     ]
   },
   {
@@ -31,21 +15,9 @@
     "name": "Eggs and Toast",
     "default_label": "Breakfast",
     "items": [
-      {
-        "food_system_key": "egg_whole",
-        "amount": 150,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "bread_whole",
-        "amount": 60,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "butter",
-        "amount": 10,
-        "unit": "g"
-      }
+      { "food_system_key": "egg_whole", "amount": 150, "unit": "g" },
+      { "food_system_key": "bread_whole", "amount": 60, "unit": "g" },
+      { "food_system_key": "butter", "amount": 10, "unit": "g" }
     ]
   },
   {
@@ -53,21 +25,9 @@
     "name": "Greek Yogurt Berries",
     "default_label": "Breakfast",
     "items": [
-      {
-        "food_system_key": "greek_yogurt_nonfat",
-        "amount": 200,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "blueberry",
-        "amount": 80,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "almonds",
-        "amount": 20,
-        "unit": "g"
-      }
+      { "food_system_key": "greek_yogurt_nonfat", "amount": 200, "unit": "g" },
+      { "food_system_key": "blueberry", "amount": 80, "unit": "g" },
+      { "food_system_key": "almonds", "amount": 20, "unit": "g" }
     ]
   },
   {
@@ -75,21 +35,9 @@
     "name": "Chicken Rice Broccoli",
     "default_label": "Lunch",
     "items": [
-      {
-        "food_system_key": "chicken_breast_cooked",
-        "amount": 150,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "rice_brown_cooked",
-        "amount": 180,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "broccoli",
-        "amount": 100,
-        "unit": "g"
-      }
+      { "food_system_key": "chicken_breast_cooked", "amount": 150, "unit": "g" },
+      { "food_system_key": "rice_brown_cooked", "amount": 180, "unit": "g" },
+      { "food_system_key": "broccoli", "amount": 100, "unit": "g" }
     ]
   },
   {
@@ -97,26 +45,10 @@
     "name": "Tuna Wrap",
     "default_label": "Lunch",
     "items": [
-      {
-        "food_system_key": "tuna_canned_water",
-        "amount": 120,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "tortilla_wrap",
-        "amount": 70,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "tomato",
-        "amount": 60,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "spinach",
-        "amount": 30,
-        "unit": "g"
-      }
+      { "food_system_key": "tuna_canned_water", "amount": 120, "unit": "g" },
+      { "food_system_key": "tortilla_wrap", "amount": 70, "unit": "g" },
+      { "food_system_key": "tomato", "amount": 60, "unit": "g" },
+      { "food_system_key": "spinach", "amount": 30, "unit": "g" }
     ]
   },
   {
@@ -124,21 +56,9 @@
     "name": "Salmon Quinoa Bowl",
     "default_label": "Lunch",
     "items": [
-      {
-        "food_system_key": "salmon_cooked",
-        "amount": 140,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "quinoa_cooked",
-        "amount": 160,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "cucumber",
-        "amount": 80,
-        "unit": "g"
-      }
+      { "food_system_key": "salmon_cooked", "amount": 140, "unit": "g" },
+      { "food_system_key": "quinoa_cooked", "amount": 160, "unit": "g" },
+      { "food_system_key": "cucumber", "amount": 80, "unit": "g" }
     ]
   },
   {
@@ -146,21 +66,9 @@
     "name": "Turkey Pasta",
     "default_label": "Dinner",
     "items": [
-      {
-        "food_system_key": "turkey_breast_cooked",
-        "amount": 150,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "pasta_cooked",
-        "amount": 180,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "tomato",
-        "amount": 100,
-        "unit": "g"
-      }
+      { "food_system_key": "turkey_breast_cooked", "amount": 150, "unit": "g" },
+      { "food_system_key": "pasta_cooked", "amount": 180, "unit": "g" },
+      { "food_system_key": "tomato", "amount": 100, "unit": "g" }
     ]
   },
   {
@@ -168,21 +76,9 @@
     "name": "Salmon Potato Plate",
     "default_label": "Dinner",
     "items": [
-      {
-        "food_system_key": "salmon_cooked",
-        "amount": 150,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "potato_boiled",
-        "amount": 200,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "broccoli",
-        "amount": 100,
-        "unit": "g"
-      }
+      { "food_system_key": "salmon_cooked", "amount": 150, "unit": "g" },
+      { "food_system_key": "potato_boiled", "amount": 200, "unit": "g" },
+      { "food_system_key": "broccoli", "amount": 100, "unit": "g" }
     ]
   },
   {
@@ -190,16 +86,8 @@
     "name": "Yogurt Banana Snack",
     "default_label": "Snack",
     "items": [
-      {
-        "food_system_key": "greek_yogurt_nonfat",
-        "amount": 150,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "banana",
-        "amount": 120,
-        "unit": "g"
-      }
+      { "food_system_key": "greek_yogurt_nonfat", "amount": 150, "unit": "g" },
+      { "food_system_key": "banana", "amount": 120, "unit": "g" }
     ]
   },
   {
@@ -207,16 +95,127 @@
     "name": "Protein Shake",
     "default_label": "Snack",
     "items": [
-      {
-        "food_system_key": "protein_powder",
-        "amount": 30,
-        "unit": "g"
-      },
-      {
-        "food_system_key": "milk_whole",
-        "amount": 250,
-        "unit": "ml"
-      }
+      { "food_system_key": "protein_powder", "amount": 30, "unit": "g" },
+      { "food_system_key": "milk_whole", "amount": 250, "unit": "ml" }
+    ]
+  },
+  {
+    "system_key": "breakfast_chia_pudding",
+    "name": "Chia Pudding Bowl",
+    "default_label": "Breakfast",
+    "items": [
+      { "food_system_key": "chia_seeds", "amount": 30, "unit": "g" },
+      { "food_system_key": "milk_whole", "amount": 200, "unit": "ml" },
+      { "food_system_key": "banana", "amount": 80, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "breakfast_avocado_toast",
+    "name": "Avocado Toast",
+    "default_label": "Breakfast",
+    "items": [
+      { "food_system_key": "bread_whole", "amount": 70, "unit": "g" },
+      { "food_system_key": "avocado", "amount": 80, "unit": "g" },
+      { "food_system_key": "egg_whole", "amount": 60, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "breakfast_protein_yogurt_bowl",
+    "name": "Protein Yogurt Bowl",
+    "default_label": "Breakfast",
+    "items": [
+      { "food_system_key": "greek_yogurt_nonfat", "amount": 200, "unit": "g" },
+      { "food_system_key": "protein_powder", "amount": 20, "unit": "g" },
+      { "food_system_key": "strawberry", "amount": 80, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "lunch_chicken_quinoa",
+    "name": "Chicken Quinoa Salad",
+    "default_label": "Lunch",
+    "items": [
+      { "food_system_key": "chicken_breast_cooked", "amount": 140, "unit": "g" },
+      { "food_system_key": "quinoa_cooked", "amount": 160, "unit": "g" },
+      { "food_system_key": "cucumber", "amount": 80, "unit": "g" },
+      { "food_system_key": "tomato", "amount": 80, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "lunch_lentil_rice",
+    "name": "Lentil Rice Bowl",
+    "default_label": "Lunch",
+    "items": [
+      { "food_system_key": "lentils_cooked", "amount": 150, "unit": "g" },
+      { "food_system_key": "rice_white_cooked", "amount": 150, "unit": "g" },
+      { "food_system_key": "spinach", "amount": 60, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "lunch_chickpea_salad",
+    "name": "Chickpea Salad",
+    "default_label": "Lunch",
+    "items": [
+      { "food_system_key": "chickpeas_cooked", "amount": 160, "unit": "g" },
+      { "food_system_key": "tomato", "amount": 80, "unit": "g" },
+      { "food_system_key": "cucumber", "amount": 80, "unit": "g" },
+      { "food_system_key": "olive_oil", "amount": 10, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "dinner_chicken_potato",
+    "name": "Chicken Potato Plate",
+    "default_label": "Dinner",
+    "items": [
+      { "food_system_key": "chicken_breast_cooked", "amount": 160, "unit": "g" },
+      { "food_system_key": "potato_boiled", "amount": 200, "unit": "g" },
+      { "food_system_key": "broccoli", "amount": 100, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "dinner_beans_rice",
+    "name": "Beans Rice Bowl",
+    "default_label": "Dinner",
+    "items": [
+      { "food_system_key": "black_beans_cooked", "amount": 160, "unit": "g" },
+      { "food_system_key": "rice_brown_cooked", "amount": 150, "unit": "g" },
+      { "food_system_key": "tomato", "amount": 80, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "dinner_tofu_quinoa",
+    "name": "Tofu Quinoa Bowl",
+    "default_label": "Dinner",
+    "items": [
+      { "food_system_key": "tofu", "amount": 160, "unit": "g" },
+      { "food_system_key": "quinoa_cooked", "amount": 150, "unit": "g" },
+      { "food_system_key": "broccoli", "amount": 100, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "snack_dates_nuts",
+    "name": "Dates and Nuts",
+    "default_label": "Snack",
+    "items": [
+      { "food_system_key": "dates_medjool", "amount": 60, "unit": "g" },
+      { "food_system_key": "almonds", "amount": 20, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "snack_fruit_yogurt",
+    "name": "Fruit Yogurt",
+    "default_label": "Snack",
+    "items": [
+      { "food_system_key": "greek_yogurt_nonfat", "amount": 150, "unit": "g" },
+      { "food_system_key": "apple", "amount": 100, "unit": "g" }
+    ]
+  },
+  {
+    "system_key": "snack_coffee_dark_chocolate",
+    "name": "Coffee and Dark Chocolate",
+    "default_label": "Snack",
+    "items": [
+      { "food_system_key": "black_coffee", "amount": 200, "unit": "ml" },
+      { "food_system_key": "dark_chocolate_85", "amount": 20, "unit": "g" }
     ]
   }
 ]
