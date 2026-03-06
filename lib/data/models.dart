@@ -4,10 +4,7 @@ class Food {
   final int? id;
   final String name;
 
-  // Nutrition values stored "per baseAmount of unit"
-  // Example:
-  // - unit=g, baseAmount=100 => per 100g
-  // - unit=tbsp, baseAmount=1 => per 1 tbsp
+  // Nutrition values are stored per baseAmount of unit
   final double calories;
   final double protein;
   final double carbs;
@@ -17,13 +14,11 @@ class Food {
   final double sugar;
   final double sodium;
 
-  // ✅ unit system
-  final String unit; // g, ml, tbsp, piece, ...
-  final double baseAmount; // 100 for g/ml, 1 for tbsp/piece/etc
+  final String unit;       // g, ml, tbsp, tsp, cup, liter, piece, slice
+  final double baseAmount; // 100 for g/ml, 1 for others
 
-  // ✅ global/system seed support
-  final bool isSystem; // true = preseeded global food
-  final String? category; // Fruit, Veg, Grain, Meat...
+  final bool isSystem;
+  final String? category;
 
   const Food({
     this.id,
@@ -41,97 +36,69 @@ class Food {
     this.category,
   });
 
-  Food copyWith({
-    int? id,
-    String? name,
-    double? calories,
-    double? protein,
-    double? carbs,
-    double? fat,
-    double? fiber,
-    double? sugar,
-    double? sodium,
-    String? unit,
-    double? baseAmount,
-    bool? isSystem,
-    String? category,
-  }) {
-    return Food(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      calories: calories ?? this.calories,
-      protein: protein ?? this.protein,
-      carbs: carbs ?? this.carbs,
-      fat: fat ?? this.fat,
-      fiber: fiber ?? this.fiber,
-      sugar: sugar ?? this.sugar,
-      sodium: sodium ?? this.sodium,
-      unit: unit ?? this.unit,
-      baseAmount: baseAmount ?? this.baseAmount,
-      isSystem: isSystem ?? this.isSystem,
-      category: category ?? this.category,
-    );
+  Map<String, Object?> toMap() {
+    return {
+      if (id != null) 'id': id,
+      'name': name,
+      'calories': calories,
+      'protein': protein,
+      'carbs': carbs,
+      'fat': fat,
+      'fiber': fiber,
+      'sugar': sugar,
+      'sodium': sodium,
+      'unit': unit,
+      'base_amount': baseAmount,
+      'is_system': isSystem ? 1 : 0,
+      'category': category,
+    };
   }
 
-  Map<String, Object?> toMap() => {
-        'id': id,
-        'name': name,
-        'calories': calories,
-        'protein': protein,
-        'carbs': carbs,
-        'fat': fat,
-        'fiber': fiber,
-        'sugar': sugar,
-        'sodium': sodium,
-        'unit': unit.trim().isEmpty ? 'g' : unit.trim(),
-        'base_amount': baseAmount,
-        'is_system': isSystem ? 1 : 0,
-        'category': category,
-      };
-
-  static Food fromMap(Map<String, Object?> m) => Food(
-        id: (m['id'] as int?),
-        name: (m['name'] as String),
-        calories: (m['calories'] as num).toDouble(),
-        protein: (m['protein'] as num).toDouble(),
-        carbs: (m['carbs'] as num).toDouble(),
-        fat: (m['fat'] as num).toDouble(),
-        fiber: ((m['fiber'] as num?) ?? 0).toDouble(),
-        sugar: ((m['sugar'] as num?) ?? 0).toDouble(),
-        sodium: ((m['sodium'] as num?) ?? 0).toDouble(),
-        unit: (m['unit'] as String?)?.trim().isNotEmpty == true ? (m['unit'] as String).trim() : 'g',
-        baseAmount: ((m['base_amount'] as num?) ?? 100).toDouble(),
-        isSystem: ((m['is_system'] as num?) ?? 0).toInt() == 1,
-        category: (m['category'] as String?),
-      );
+  static Food fromMap(Map<String, Object?> m) {
+    return Food(
+      id: (m['id'] as num?)?.toInt(),
+      name: (m['name'] as String?) ?? '',
+      calories: ((m['calories'] as num?) ?? 0).toDouble(),
+      protein: ((m['protein'] as num?) ?? 0).toDouble(),
+      carbs: ((m['carbs'] as num?) ?? 0).toDouble(),
+      fat: ((m['fat'] as num?) ?? 0).toDouble(),
+      fiber: ((m['fiber'] as num?) ?? 0).toDouble(),
+      sugar: ((m['sugar'] as num?) ?? 0).toDouble(),
+      sodium: ((m['sodium'] as num?) ?? 0).toDouble(),
+      unit: (m['unit'] as String?) ?? 'g',
+      baseAmount: ((m['base_amount'] as num?) ?? 100).toDouble(),
+      isSystem: ((m['is_system'] as num?) ?? 0).toInt() == 1,
+      category: m['category'] as String?,
+    );
+  }
 }
 
 class LogEntry {
   final int? id;
-  final String date; // "yyyy-MM-dd"
+  final String date;
+
+  // For food entries:
   final int? foodId;
 
-  // amount in the food's unit (legacy column name "grams")
+  // Amount in chosen unit (for manual we still keep grams=1 just as placeholder)
   final double grams;
 
-  // snapshot unit/base (so history survives edits/deletes)
+  // Snapshot of unit/baseAmount used at log time (important for history)
   final String unit;
   final double baseAmount;
 
-  // UI fields
-  final String? time; // "HH:mm"
-  final String? label; // "Breakfast" etc.
+  final String? time;  // "HH:mm"
+  final String? label; // Breakfast/Lunch/...
 
-  // snapshot nutrition per baseAmount (legacy column names in DB)
+  // Snapshot nutrition (per baseAmount) for food entries
   final String? foodName;
   final double? calories100;
   final double? protein100;
   final double? carbs100;
   final double? fat100;
 
-  // ✅ one-time manual entry support
-  // entryType: 'food' or 'manual'
-  final String entryType;
+  // Manual one-time entry support
+  final String entryType; // 'food' or 'manual'
   final String? manualName;
   final double? manualKcal;
   final double? manualProtein;
@@ -147,11 +114,13 @@ class LogEntry {
     this.baseAmount = 100,
     this.time,
     this.label,
+
     this.foodName,
     this.calories100,
     this.protein100,
     this.carbs100,
     this.fat100,
+
     this.entryType = 'food',
     this.manualName,
     this.manualKcal,
@@ -160,140 +129,98 @@ class LogEntry {
     this.manualFat,
   });
 
-  Map<String, Object?> toMap() => {
-        'id': id,
-        'date': date,
-        'food_id': foodId,
-        'grams': grams,
-        'unit': unit.trim().isEmpty ? 'g' : unit.trim(),
-        'base_amount': baseAmount,
-        'time': time,
-        'label': label,
+  Map<String, Object?> toMap() {
+    return {
+      if (id != null) 'id': id,
+      'date': date,
+      'food_id': foodId,
+      'grams': grams,
+      'unit': unit,
+      'base_amount': baseAmount,
+      'time': time,
+      'label': label,
 
-        // snapshot nutrition
-        'food_name': foodName,
-        'calories_100': calories100,
-        'protein_100': protein100,
-        'carbs_100': carbs100,
-        'fat_100': fat100,
+      'food_name': foodName,
+      'calories_100': calories100,
+      'protein_100': protein100,
+      'carbs_100': carbs100,
+      'fat_100': fat100,
 
-        // manual entry fields
-        'entry_type': entryType,
-        'manual_name': manualName,
-        'manual_kcal': manualKcal,
-        'manual_protein': manualProtein,
-        'manual_carbs': manualCarbs,
-        'manual_fat': manualFat,
-      };
-
-  static LogEntry fromMap(Map<String, Object?> m) => LogEntry(
-        id: (m['id'] as int?),
-        date: (m['date'] as String),
-        foodId: (m['food_id'] as int?),
-        grams: (m['grams'] as num).toDouble(),
-        unit: (m['unit'] as String?)?.trim().isNotEmpty == true ? (m['unit'] as String).trim() : 'g',
-        baseAmount: ((m['base_amount'] as num?) ?? 100).toDouble(),
-        time: (m['time'] as String?),
-        label: (m['label'] as String?),
-
-        // snapshot nutrition
-        foodName: (m['food_name'] as String?),
-        calories100: (m['calories_100'] as num?)?.toDouble(),
-        protein100: (m['protein_100'] as num?)?.toDouble(),
-        carbs100: (m['carbs_100'] as num?)?.toDouble(),
-        fat100: (m['fat_100'] as num?)?.toDouble(),
-
-        // manual entry fields
-        entryType: (m['entry_type'] as String?) ?? 'food',
-        manualName: (m['manual_name'] as String?),
-        manualKcal: (m['manual_kcal'] as num?)?.toDouble(),
-        manualProtein: (m['manual_protein'] as num?)?.toDouble(),
-        manualCarbs: (m['manual_carbs'] as num?)?.toDouble(),
-        manualFat: (m['manual_fat'] as num?)?.toDouble(),
-      );
-}
-
-class DayTotals {
-  final double calories;
-  final double protein;
-  final double carbs;
-  final double fat;
-
-  final double fiber;
-  final double sugar;
-  final double sodium;
-
-  const DayTotals({
-    this.calories = 0,
-    this.protein = 0,
-    this.carbs = 0,
-    this.fat = 0,
-    this.fiber = 0,
-    this.sugar = 0,
-    this.sodium = 0,
-  });
-
-  DayTotals addScaledFood(Food food, double amount) {
-    final safeBase = food.baseAmount <= 0 ? 1 : food.baseAmount;
-    final factor = amount / safeBase;
-
-    return DayTotals(
-      calories: calories + food.calories * factor,
-      protein: protein + food.protein * factor,
-      carbs: carbs + food.carbs * factor,
-      fat: fat + food.fat * factor,
-      fiber: fiber + food.fiber * factor,
-      sugar: sugar + food.sugar * factor,
-      sodium: sodium + food.sodium * factor,
-    );
+      'entry_type': entryType,
+      'manual_name': manualName,
+      'manual_kcal': manualKcal,
+      'manual_protein': manualProtein,
+      'manual_carbs': manualCarbs,
+      'manual_fat': manualFat,
+    };
   }
 
-  DayTotals addManual({
-    required double caloriesAdd,
-    required double proteinAdd,
-    required double carbsAdd,
-    required double fatAdd,
-  }) {
-    return DayTotals(
-      calories: calories + caloriesAdd,
-      protein: protein + proteinAdd,
-      carbs: carbs + carbsAdd,
-      fat: fat + fatAdd,
-      fiber: fiber,
-      sugar: sugar,
-      sodium: sodium,
+  static LogEntry fromMap(Map<String, Object?> m) {
+    return LogEntry(
+      id: (m['id'] as num?)?.toInt(),
+      date: (m['date'] as String?) ?? '',
+      foodId: (m['food_id'] as num?)?.toInt(),
+      grams: ((m['grams'] as num?) ?? 0).toDouble(),
+      unit: (m['unit'] as String?) ?? 'g',
+      baseAmount: ((m['base_amount'] as num?) ?? 100).toDouble(),
+      time: m['time'] as String?,
+      label: m['label'] as String?,
+
+      foodName: m['food_name'] as String?,
+      calories100: (m['calories_100'] as num?)?.toDouble(),
+      protein100: (m['protein_100'] as num?)?.toDouble(),
+      carbs100: (m['carbs_100'] as num?)?.toDouble(),
+      fat100: (m['fat_100'] as num?)?.toDouble(),
+
+      entryType: (m['entry_type'] as String?) ?? 'food',
+      manualName: m['manual_name'] as String?,
+      manualKcal: (m['manual_kcal'] as num?)?.toDouble(),
+      manualProtein: (m['manual_protein'] as num?)?.toDouble(),
+      manualCarbs: (m['manual_carbs'] as num?)?.toDouble(),
+      manualFat: (m['manual_fat'] as num?)?.toDouble(),
     );
   }
 }
-
-// Optional: meal template models (handy for UI later)
 
 class MealTemplate {
   final int? id;
   final String name;
-  final String label; // breakfast/lunch/dinner/snack/custom
-  final String createdAt; // ISO string
+  final String label;
+  final String createdAt;
+
+  final bool isSystem;
+  final String? systemKey;
 
   const MealTemplate({
     this.id,
     required this.name,
     required this.label,
     required this.createdAt,
+    this.isSystem = false,
+    this.systemKey,
   });
 
-  Map<String, Object?> toMap() => {
-        'id': id,
-        'name': name,
-        'label': label,
-        'created_at': createdAt,
-      };
+  Map<String, Object?> toMap() {
+    return {
+      if (id != null) 'id': id,
+      'name': name,
+      'label': label,
+      'created_at': createdAt,
+      'is_system': isSystem ? 1 : 0,
+      'system_key': systemKey,
+    };
+  }
 
-  static MealTemplate fromMap(Map<String, Object?> m) => MealTemplate(
-        id: (m['id'] as int?),
-        name: (m['name'] as String),
-        label: (m['label'] as String),
-        createdAt: (m['created_at'] as String),
-      );
+  static MealTemplate fromMap(Map<String, Object?> m) {
+    return MealTemplate(
+      id: (m['id'] as num?)?.toInt(),
+      name: (m['name'] as String?) ?? '',
+      label: (m['label'] as String?) ?? '',
+      createdAt: (m['created_at'] as String?) ?? '',
+      isSystem: ((m['is_system'] as num?) ?? 0).toInt() == 1,
+      systemKey: m['system_key'] as String?,
+    );
+  }
 }
 
 class MealTemplateItem {
@@ -315,23 +242,79 @@ class MealTemplateItem {
     required this.sortOrder,
   });
 
-  Map<String, Object?> toMap() => {
-        'id': id,
-        'template_id': templateId,
-        'food_id': foodId,
-        'amount': amount,
-        'unit': unit.trim().isEmpty ? 'g' : unit.trim(),
-        'base_amount': baseAmount,
-        'sort_order': sortOrder,
-      };
+  Map<String, Object?> toMap() {
+    return {
+      if (id != null) 'id': id,
+      'template_id': templateId,
+      'food_id': foodId,
+      'amount': amount,
+      'unit': unit,
+      'base_amount': baseAmount,
+      'sort_order': sortOrder,
+    };
+  }
 
-  static MealTemplateItem fromMap(Map<String, Object?> m) => MealTemplateItem(
-        id: (m['id'] as int?),
-        templateId: (m['template_id'] as num).toInt(),
-        foodId: (m['food_id'] as num).toInt(),
-        amount: (m['amount'] as num).toDouble(),
-        unit: (m['unit'] as String?)?.trim().isNotEmpty == true ? (m['unit'] as String).trim() : 'g',
-        baseAmount: ((m['base_amount'] as num?) ?? 100).toDouble(),
-        sortOrder: ((m['sort_order'] as num?) ?? 0).toInt(),
-      );
+  static MealTemplateItem fromMap(Map<String, Object?> m) {
+    return MealTemplateItem(
+      id: (m['id'] as num?)?.toInt(),
+      templateId: (m['template_id'] as num).toInt(),
+      foodId: (m['food_id'] as num).toInt(),
+      amount: ((m['amount'] as num?) ?? 0).toDouble(),
+      unit: (m['unit'] as String?) ?? 'g',
+      baseAmount: ((m['base_amount'] as num?) ?? 100).toDouble(),
+      sortOrder: ((m['sort_order'] as num?) ?? 0).toInt(),
+    );
+  }
+}
+
+class DayTotals {
+  final double calories;
+  final double protein;
+  final double carbs;
+  final double fat;
+  final double fiber;
+  final double sugar;
+  final double sodium;
+
+  const DayTotals({
+    this.calories = 0,
+    this.protein = 0,
+    this.carbs = 0,
+    this.fat = 0,
+    this.fiber = 0,
+    this.sugar = 0,
+    this.sodium = 0,
+  });
+
+  DayTotals addScaledFood(Food f, double amount) {
+    final base = f.baseAmount <= 0 ? 1.0 : f.baseAmount;
+    final factor = amount / base;
+
+    return DayTotals(
+      calories: calories + (f.calories * factor),
+      protein: protein + (f.protein * factor),
+      carbs: carbs + (f.carbs * factor),
+      fat: fat + (f.fat * factor),
+      fiber: fiber + (f.fiber * factor),
+      sugar: sugar + (f.sugar * factor),
+      sodium: sodium + (f.sodium * factor),
+    );
+  }
+
+  DayTotals addManual({
+    required double caloriesAdd,
+    required double proteinAdd,
+    required double carbsAdd,
+    required double fatAdd,
+  }) {
+    return DayTotals(
+      calories: calories + caloriesAdd,
+      protein: protein + proteinAdd,
+      carbs: carbs + carbsAdd,
+      fat: fat + fatAdd,
+      fiber: fiber,
+      sugar: sugar,
+      sodium: sodium,
+    );
+  }
 }

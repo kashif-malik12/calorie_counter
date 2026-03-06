@@ -1,18 +1,17 @@
+// lib/settings/retention_settings.dart
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RetentionSettings {
-  static const _kDays = 'retention_days';
+  static const _kRetentionDays = 'retention_days';
 
-  /// Default: keep 365 days
   static Future<int> getRetentionDays() async {
     final sp = await SharedPreferences.getInstance();
-    return sp.getInt(_kDays) ?? 365;
+    return sp.getInt(_kRetentionDays) ?? 180;
   }
 
   static Future<void> setRetentionDays(int days) async {
     final sp = await SharedPreferences.getInstance();
-    // clamp to reasonable range
-    final v = days.clamp(7, 3650);
-    await sp.setInt(_kDays, v);
+    final clamped = days.clamp(7, 3650);
+    await sp.setInt(_kRetentionDays, clamped);
   }
 }

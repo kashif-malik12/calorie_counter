@@ -2,62 +2,56 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TargetSettings {
-  static const _kCalories = 'target_calories';
-  static const _kProtein = 'target_protein';
-  static const _kCarbs = 'target_carbs';
-  static const _kFat = 'target_fat';
-
-  static const int defaultCalories = 2000;
-  static const int defaultProtein = 150; // g
-  static const int defaultCarbs = 200; // g
-  static const int defaultFat = 70; // g
+  static const _kCalories = 'targets_calories';
+  static const _kProtein = 'targets_protein';
+  static const _kCarbs = 'targets_carbs';
+  static const _kFat = 'targets_fat';
 
   static Future<int> getCalories() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_kCalories) ?? defaultCalories;
-  }
+    final sp = await SharedPreferences.getInstance();
+    return sp.getInt(_kCalories) ?? 2000;
+    }
 
   static Future<int> getProtein() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_kProtein) ?? defaultProtein;
+    final sp = await SharedPreferences.getInstance();
+    return sp.getInt(_kProtein) ?? 150;
   }
 
   static Future<int> getCarbs() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_kCarbs) ?? defaultCarbs;
+    final sp = await SharedPreferences.getInstance();
+    return sp.getInt(_kCarbs) ?? 200;
   }
 
   static Future<int> getFat() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_kFat) ?? defaultFat;
+    final sp = await SharedPreferences.getInstance();
+    return sp.getInt(_kFat) ?? 70;
   }
 
   static Future<void> setCalories(int v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_kCalories, v);
+    final sp = await SharedPreferences.getInstance();
+    await sp.setInt(_kCalories, v);
   }
 
   static Future<void> setProtein(int v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_kProtein, v);
+    final sp = await SharedPreferences.getInstance();
+    await sp.setInt(_kProtein, v);
   }
 
   static Future<void> setCarbs(int v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_kCarbs, v);
+    final sp = await SharedPreferences.getInstance();
+    await sp.setInt(_kCarbs, v);
   }
 
   static Future<void> setFat(int v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_kFat, v);
+    final sp = await SharedPreferences.getInstance();
+    await sp.setInt(_kFat, v);
   }
 
-  // ✅ Test helper: clears saved targets so defaults apply again
   static Future<void> resetAllTargets() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kCalories);
-    await prefs.remove(_kProtein);
-    await prefs.remove(_kCarbs);
-    await prefs.remove(_kFat);
+    final sp = await SharedPreferences.getInstance();
+    await sp.remove(_kCalories);
+    await sp.remove(_kProtein);
+    await sp.remove(_kCarbs);
+    await sp.remove(_kFat);
   }
 }
