@@ -17,6 +17,11 @@ import 'settings/target_settings.dart';
 import 'settings/retention_settings.dart';
 
 const bool kResetOnStartup = false;
+const String kBrandMarkAsset = 'assets/branding/caloriefit_mark.png';
+const String kBrandLogoAsset = 'assets/branding/caloriefit_logo.png';
+const Color kBrandPrimary = Color(0xFF0B3C49);
+const Color kBrandAccent = Color(0xFF3AC47D);
+const Color kBrandSurface = Color(0xFFF4FBF7);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,22 +40,90 @@ Future<void> main() async {
   await AppDb.instance.db;
 //  await AppDb.instance.reseedSystemLibrary();
 
-  runApp(const CalorieCounterApp());
+  runApp(const CalorieFitApp());
 }
 
-class CalorieCounterApp extends StatelessWidget {
-  const CalorieCounterApp({super.key});
+class CalorieFitApp extends StatelessWidget {
+  const CalorieFitApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Calorie Counter (Local)',
+      title: 'CalorieFit',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorSchemeSeed: Colors.green,
+        colorSchemeSeed: kBrandPrimary,
+        scaffoldBackgroundColor: kBrandSurface,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: kBrandPrimary,
+          surfaceTintColor: Colors.transparent,
+        ),
       ),
       home: const InitGate(),
+    );
+  }
+}
+
+class BrandMark extends StatelessWidget {
+  final double size;
+
+  const BrandMark({super.key, this.size = 28});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.22),
+      child: Image.asset(
+        kBrandMarkAsset,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+}
+
+class BrandedAppBarTitle extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+
+  const BrandedAppBarTitle({
+    super.key,
+    required this.title,
+    this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const BrandMark(size: 30),
+        const SizedBox(width: 10),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              subtitle ?? 'CalorieFit',
+              style: textTheme.labelMedium?.copyWith(
+                color: kBrandPrimary.withValues(alpha: 0.72),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -87,7 +160,19 @@ class _InitGateState extends State<InitGate> {
       future: _initFuture,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(kBrandLogoAsset, width: 220),
+                  const SizedBox(height: 24),
+                  const CircularProgressIndicator(),
+                ],
+              ),
+            ),
+          );
         }
 
         if (snap.hasError) {
@@ -1262,7 +1347,7 @@ class _TodayPageState extends State<TodayPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Today ($_date)'),
+        title: BrandedAppBarTitle(title: 'Today', subtitle: _date),
         actions: [
           IconButton(
             tooltip: 'Data retention',
@@ -1533,7 +1618,7 @@ class _FoodsPageState extends State<FoodsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Foods'),
+        title: const BrandedAppBarTitle(title: 'My Foods'),
         actions: [
           IconButton(
             tooltip: 'My Templates',
@@ -1613,7 +1698,7 @@ class _GlobalPageState extends State<GlobalPage> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Global'),
+        title: const BrandedAppBarTitle(title: 'Global'),
         bottom: TabBar(
           controller: _tab,
           tabs: const [
@@ -2397,7 +2482,7 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('History ($_date)'),
+        title: BrandedAppBarTitle(title: 'History', subtitle: _date),
         actions: [
           IconButton(
             tooltip: 'Data retention',
