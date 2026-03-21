@@ -46,9 +46,12 @@ class SystemTemplatePreviewItem {
     required this.fatPerBase,
   });
 
-  double get calories => caloriesPerBase * amount / (baseAmount <= 0 ? 1 : baseAmount);
-  double get protein => proteinPerBase * amount / (baseAmount <= 0 ? 1 : baseAmount);
-  double get carbs => carbsPerBase * amount / (baseAmount <= 0 ? 1 : baseAmount);
+  double get calories =>
+      caloriesPerBase * amount / (baseAmount <= 0 ? 1 : baseAmount);
+  double get protein =>
+      proteinPerBase * amount / (baseAmount <= 0 ? 1 : baseAmount);
+  double get carbs =>
+      carbsPerBase * amount / (baseAmount <= 0 ? 1 : baseAmount);
   double get fat => fatPerBase * amount / (baseAmount <= 0 ? 1 : baseAmount);
 }
 
@@ -56,10 +59,7 @@ class SystemTemplatePreview {
   final MealTemplate template;
   final List<SystemTemplatePreviewItem> items;
 
-  const SystemTemplatePreview({
-    required this.template,
-    required this.items,
-  });
+  const SystemTemplatePreview({required this.template, required this.items});
 
   DayTotals get totals {
     double c = 0, p = 0, cb = 0, f = 0;
@@ -77,10 +77,7 @@ class TemplateWithTotals {
   final MealTemplate template;
   final DayTotals totals;
 
-  const TemplateWithTotals({
-    required this.template,
-    required this.totals,
-  });
+  const TemplateWithTotals({required this.template, required this.totals});
 }
 
 class TemplateWithTotalsPreview {
@@ -139,7 +136,7 @@ class AppDb {
     final d = await databaseFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 12,
+        version: 14,
         onConfigure: (db) async {
           if (!kIsWeb) {
             await db.execute('PRAGMA foreign_keys = ON;');
@@ -152,19 +149,35 @@ class AppDb {
           await _createSchema(db);
 
           if (!await _hasColumn(db, 'foods', 'unit')) {
-            await db.execute("ALTER TABLE foods ADD COLUMN unit TEXT NOT NULL DEFAULT 'g';");
+            await db.execute(
+              "ALTER TABLE foods ADD COLUMN unit TEXT NOT NULL DEFAULT 'g';",
+            );
           }
           if (!await _hasColumn(db, 'foods', 'base_amount')) {
-            await db.execute("ALTER TABLE foods ADD COLUMN base_amount REAL NOT NULL DEFAULT 100;");
+            await db.execute(
+              "ALTER TABLE foods ADD COLUMN base_amount REAL NOT NULL DEFAULT 100;",
+            );
           }
           if (!await _hasColumn(db, 'foods', 'is_system')) {
-            await db.execute("ALTER TABLE foods ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;");
+            await db.execute(
+              "ALTER TABLE foods ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;",
+            );
           }
           if (!await _hasColumn(db, 'foods', 'category')) {
             await db.execute("ALTER TABLE foods ADD COLUMN category TEXT;");
           }
           if (!await _hasColumn(db, 'foods', 'system_key')) {
             await db.execute("ALTER TABLE foods ADD COLUMN system_key TEXT;");
+          }
+          if (!await _hasColumn(db, 'foods', 'is_active')) {
+            await db.execute(
+              "ALTER TABLE foods ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;",
+            );
+          }
+          if (!await _hasColumn(db, 'foods', 'seed_version')) {
+            await db.execute(
+              "ALTER TABLE foods ADD COLUMN seed_version INTEGER NOT NULL DEFAULT 1;",
+            );
           }
 
           if (!await _hasColumn(db, 'log_entries', 'time')) {
@@ -174,58 +187,120 @@ class AppDb {
             await db.execute("ALTER TABLE log_entries ADD COLUMN label TEXT;");
           }
           if (!await _hasColumn(db, 'log_entries', 'unit')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN unit TEXT DEFAULT 'g';");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN unit TEXT DEFAULT 'g';",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'base_amount')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN base_amount REAL DEFAULT 100;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN base_amount REAL DEFAULT 100;",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'food_name')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN food_name TEXT;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN food_name TEXT;",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'calories_100')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN calories_100 REAL;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN calories_100 REAL;",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'protein_100')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN protein_100 REAL;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN protein_100 REAL;",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'carbs_100')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN carbs_100 REAL;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN carbs_100 REAL;",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'fat_100')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN fat_100 REAL;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN fat_100 REAL;",
+            );
           }
 
           if (!await _hasColumn(db, 'log_entries', 'entry_type')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'food';");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'food';",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'manual_name')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_name TEXT;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN manual_name TEXT;",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'manual_kcal')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_kcal REAL;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN manual_kcal REAL;",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'manual_protein')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_protein REAL;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN manual_protein REAL;",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'manual_carbs')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_carbs REAL;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN manual_carbs REAL;",
+            );
           }
           if (!await _hasColumn(db, 'log_entries', 'manual_fat')) {
-            await db.execute("ALTER TABLE log_entries ADD COLUMN manual_fat REAL;");
+            await db.execute(
+              "ALTER TABLE log_entries ADD COLUMN manual_fat REAL;",
+            );
           }
 
           if (!await _hasColumn(db, 'day_targets', 'source')) {
-            await db.execute("ALTER TABLE day_targets ADD COLUMN source TEXT DEFAULT 'manual';");
+            await db.execute(
+              "ALTER TABLE day_targets ADD COLUMN source TEXT DEFAULT 'manual';",
+            );
           }
           if (!await _hasColumn(db, 'day_targets', 'calculator_json')) {
-            await db.execute("ALTER TABLE day_targets ADD COLUMN calculator_json TEXT;");
+            await db.execute(
+              "ALTER TABLE day_targets ADD COLUMN calculator_json TEXT;",
+            );
           }
 
           if (!await _hasColumn(db, 'meal_templates', 'is_system')) {
-            await db.execute("ALTER TABLE meal_templates ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;");
+            await db.execute(
+              "ALTER TABLE meal_templates ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;",
+            );
           }
           if (!await _hasColumn(db, 'meal_templates', 'system_key')) {
-            await db.execute("ALTER TABLE meal_templates ADD COLUMN system_key TEXT;");
+            await db.execute(
+              "ALTER TABLE meal_templates ADD COLUMN system_key TEXT;",
+            );
+          }
+          if (!await _hasColumn(db, 'meal_templates', 'is_active')) {
+            await db.execute(
+              "ALTER TABLE meal_templates ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;",
+            );
+          }
+          if (!await _hasColumn(db, 'meal_templates', 'seed_version')) {
+            await db.execute(
+              "ALTER TABLE meal_templates ADD COLUMN seed_version INTEGER NOT NULL DEFAULT 1;",
+            );
+          }
+
+          // v14: serving size presets
+          final servingsExists = await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='food_servings';",
+          );
+          if (servingsExists.isEmpty) {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS food_servings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                food_id INTEGER NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                grams REAL NOT NULL
+              );
+            ''');
+            await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_food_servings_food ON food_servings(food_id);',
+            );
           }
         },
       ),
@@ -255,8 +330,10 @@ class AppDb {
         base_amount REAL NOT NULL DEFAULT 100,
 
         is_system INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
         category TEXT,
-        system_key TEXT
+        system_key TEXT,
+        seed_version INTEGER NOT NULL DEFAULT 1
       );
     ''');
 
@@ -288,8 +365,12 @@ class AppDb {
       );
     ''');
 
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date ON log_entries(date);');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_log_date_time ON log_entries(date, time);');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_log_date ON log_entries(date);',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_log_date_time ON log_entries(date, time);',
+    );
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS day_targets (
@@ -310,7 +391,9 @@ class AppDb {
         label TEXT NOT NULL,
         created_at TEXT NOT NULL,
         is_system INTEGER NOT NULL DEFAULT 0,
-        system_key TEXT
+        is_active INTEGER NOT NULL DEFAULT 1,
+        system_key TEXT,
+        seed_version INTEGER NOT NULL DEFAULT 1
       );
     ''');
 
@@ -326,36 +409,83 @@ class AppDb {
       );
     ''');
 
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_templates_label ON meal_templates(label);');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_templates_system ON meal_templates(is_system, name);');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_meal_items_template ON meal_template_items(template_id, sort_order);');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_meal_templates_label ON meal_templates(label);',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_meal_templates_system ON meal_templates(is_system, name);',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_meal_items_template ON meal_template_items(template_id, sort_order);',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_foods_system_active ON foods(is_system, is_active, name);',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_meal_templates_system_active ON meal_templates(is_system, is_active, name);',
+    );
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS food_servings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        food_id INTEGER NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        grams REAL NOT NULL
+      );
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_food_servings_food ON food_servings(food_id);',
+    );
   }
 
   // ---------------- SYSTEM SEEDING ----------------
 
   Future<void> ensureSystemSeeded(Database db) async {
-    final foodsCountRows =
-        await db.rawQuery('SELECT COUNT(*) AS c FROM foods WHERE is_system = 1;');
-    final existingFoods = (foodsCountRows.first['c'] as num?)?.toInt() ?? 0;
-
-    final templatesCountRows = await db
-        .rawQuery('SELECT COUNT(*) AS c FROM meal_templates WHERE is_system = 1;');
-    final existingTemplates =
-        (templatesCountRows.first['c'] as num?)?.toInt() ?? 0;
-
-    if (existingFoods > 0 && existingTemplates > 0) return;
-
     String norm(String s) =>
         s.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
 
-    if (existingFoods == 0) {
-      final rawFoods = await rootBundle.loadString('assets/system_foods.json');
-      final list = (jsonDecode(rawFoods) as List).cast<Map<String, dynamic>>();
+    String placeholders(int count) => List.filled(count, '?').join(', ');
 
-      final batch = db.batch();
-      for (final m in list) {
-        batch.insert('foods', {
-          'name': (m['name'] ?? '').toString(),
+    final rawFoods = await rootBundle.loadString('assets/system_foods.json');
+    final foods = (jsonDecode(rawFoods) as List).cast<Map<String, dynamic>>();
+
+    final rawTemplates = await rootBundle.loadString(
+      'assets/system_templates.json',
+    );
+    final templates = (jsonDecode(rawTemplates) as List)
+        .cast<Map<String, dynamic>>();
+
+    await db.transaction((txn) async {
+      final existingFoodRows = await txn.query('foods', where: 'is_system = 1');
+
+      final foodIdBySystemKey = <String, int>{};
+      final foodIdByName = <String, int>{};
+
+      for (final row in existingFoodRows) {
+        final id = (row['id'] as num?)?.toInt();
+        if (id == null) continue;
+
+        final systemKey = (row['system_key'] as String?)?.trim();
+        if (systemKey != null && systemKey.isNotEmpty) {
+          foodIdBySystemKey[systemKey] = id;
+        }
+
+        final name = (row['name'] as String?)?.trim();
+        if (name != null && name.isNotEmpty) {
+          foodIdByName[norm(name)] = id;
+        }
+      }
+
+      final matchedFoodIds = <int>{};
+
+      for (final m in foods) {
+        final name = (m['name'] ?? '').toString().trim();
+        if (name.isEmpty) continue;
+
+        final systemKey = (m['system_key'] ?? '').toString().trim();
+
+        final values = <String, Object?>{
+          'name': name,
           'calories': (m['calories'] as num?)?.toDouble() ?? 0,
           'protein': (m['protein'] as num?)?.toDouble() ?? 0,
           'carbs': (m['carbs'] as num?)?.toDouble() ?? 0,
@@ -366,94 +496,186 @@ class AppDb {
           'unit': (m['unit'] ?? 'g').toString(),
           'base_amount': (m['baseAmount'] as num?)?.toDouble() ?? 100,
           'is_system': 1,
+          'is_active': 1,
           'category': m['category']?.toString(),
-          'system_key': m['system_key']?.toString(),
-        });
+          'system_key': systemKey.isEmpty ? null : systemKey,
+          'seed_version': (m['seed_version'] as num?)?.toInt() ?? 1,
+        };
+
+        int? id;
+        if (systemKey.isNotEmpty) {
+          id = foodIdBySystemKey[systemKey];
+        }
+        id ??= foodIdByName[norm(name)];
+
+        if (id == null) {
+          id = await txn.insert('foods', values);
+        } else {
+          await txn.update('foods', values, where: 'id = ?', whereArgs: [id]);
+        }
+
+        matchedFoodIds.add(id);
+        if (systemKey.isNotEmpty) {
+          foodIdBySystemKey[systemKey] = id;
+        }
+        foodIdByName[norm(name)] = id;
       }
-      await batch.commit(noResult: true);
-    }
 
-    if (existingTemplates == 0) {
-      final rawT = await rootBundle.loadString('assets/system_templates.json');
-      final list = (jsonDecode(rawT) as List).cast<Map<String, dynamic>>();
+      if (matchedFoodIds.isEmpty) {
+        await txn.update('foods', {'is_active': 0}, where: 'is_system = 1');
+      } else {
+        final args = matchedFoodIds.toList(growable: false);
+        await txn.update(
+          'foods',
+          {'is_active': 0},
+          where: 'is_system = 1 AND id NOT IN (${placeholders(args.length)})',
+          whereArgs: args,
+        );
+      }
 
-      final foodRows = await db.rawQuery(
-        'SELECT id, name, system_key FROM foods WHERE is_system = 1;',
+      final existingTemplateRows = await txn.query(
+        'meal_templates',
+        where: 'is_system = 1',
       );
 
-      final Map<String, int> foodIdByName = {
-        for (final r in foodRows)
-          norm((r['name'] as String?) ?? ''): (r['id'] as int),
-      };
-      final Map<String, int> foodIdBySystemKey = {
-        for (final r in foodRows)
-          if ((r['system_key'] as String?)?.trim().isNotEmpty == true)
-            (r['system_key'] as String).trim(): (r['id'] as int),
-      };
+      final templateIdBySystemKey = <String, int>{};
+      final templateIdByName = <String, int>{};
+      final createdAtById = <int, String>{};
 
-      await db.transaction((txn) async {
-        for (final t in list) {
-          final templateName = (t['name'] ?? '').toString().trim();
-          final label =
-              (t['default_label'] ?? t['label'] ?? 'Custom').toString().trim();
-          final systemKey = t['system_key']?.toString().trim();
-          final createdAt = DateTime.now().toIso8601String();
+      for (final row in existingTemplateRows) {
+        final id = (row['id'] as num?)?.toInt();
+        if (id == null) continue;
 
-          if (templateName.isEmpty) continue;
-
-          final templateId = await txn.insert('meal_templates', {
-            'name': templateName,
-            'label': label.isEmpty ? 'Custom' : label,
-            'created_at': createdAt,
-            'is_system': 1,
-            'system_key': systemKey,
-          });
-
-          final rawItems = (t['items'] as List? ?? const []);
-          var sort = 0;
-
-          for (final rawItem in rawItems) {
-            final it = Map<String, dynamic>.from(rawItem as Map);
-
-            final rawFoodName = (
-              it['food'] ??
-              it['name'] ??
-              it['foodName'] ??
-              it['item'] ??
-              it['food_name'] ??
-              ''
-            ).toString().trim();
-
-            final foodSystemKey = it['food_system_key']?.toString().trim();
-
-            int? foodId;
-            if (foodSystemKey != null && foodSystemKey.isNotEmpty) {
-              foodId = foodIdBySystemKey[foodSystemKey];
-            }
-            if (foodId == null && rawFoodName.isNotEmpty) {
-              foodId = foodIdByName[norm(rawFoodName)];
-            }
-            if (foodId == null) {
-              continue;
-            }
-
-            final amount = (it['amount'] as num?)?.toDouble() ?? 1;
-            final unit = (it['unit'] ?? 'g').toString().trim();
-            final baseAmount = (it['baseAmount'] as num?)?.toDouble() ??
-                ((unit == 'g' || unit == 'ml') ? 100 : 1);
-
-            await txn.insert('meal_template_items', {
-              'template_id': templateId,
-              'food_id': foodId,
-              'amount': amount,
-              'unit': unit.isEmpty ? 'g' : unit,
-              'base_amount': baseAmount <= 0 ? 1 : baseAmount,
-              'sort_order': sort++,
-            });
-          }
+        final systemKey = (row['system_key'] as String?)?.trim();
+        if (systemKey != null && systemKey.isNotEmpty) {
+          templateIdBySystemKey[systemKey] = id;
         }
-      });
-    }
+
+        final name = (row['name'] as String?)?.trim();
+        if (name != null && name.isNotEmpty) {
+          templateIdByName[norm(name)] = id;
+        }
+
+        createdAtById[id] =
+            (row['created_at'] as String?) ?? DateTime.now().toIso8601String();
+      }
+
+      final matchedTemplateIds = <int>{};
+
+      for (final t in templates) {
+        final templateName = (t['name'] ?? '').toString().trim();
+        if (templateName.isEmpty) continue;
+
+        final label = (t['default_label'] ?? t['label'] ?? 'Custom')
+            .toString()
+            .trim();
+        final systemKey = (t['system_key'] ?? '').toString().trim();
+
+        int? templateId;
+        if (systemKey.isNotEmpty) {
+          templateId = templateIdBySystemKey[systemKey];
+        }
+        templateId ??= templateIdByName[norm(templateName)];
+
+        final createdAt = templateId != null
+            ? createdAtById[templateId] ?? DateTime.now().toIso8601String()
+            : DateTime.now().toIso8601String();
+
+        final values = <String, Object?>{
+          'name': templateName,
+          'label': label.isEmpty ? 'Custom' : label,
+          'created_at': createdAt,
+          'is_system': 1,
+          'is_active': 1,
+          'system_key': systemKey.isEmpty ? null : systemKey,
+          'seed_version': (t['seed_version'] as num?)?.toInt() ?? 1,
+        };
+
+        if (templateId == null) {
+          templateId = await txn.insert('meal_templates', values);
+        } else {
+          await txn.update(
+            'meal_templates',
+            values,
+            where: 'id = ?',
+            whereArgs: [templateId],
+          );
+        }
+
+        matchedTemplateIds.add(templateId);
+        if (systemKey.isNotEmpty) {
+          templateIdBySystemKey[systemKey] = templateId;
+        }
+        templateIdByName[norm(templateName)] = templateId;
+
+        await txn.delete(
+          'meal_template_items',
+          where: 'template_id = ?',
+          whereArgs: [templateId],
+        );
+
+        final rawItems = (t['items'] as List? ?? const []);
+        var sort = 0;
+
+        for (final rawItem in rawItems) {
+          final it = Map<String, dynamic>.from(rawItem as Map);
+
+          final rawFoodName =
+              (it['food'] ??
+                      it['name'] ??
+                      it['foodName'] ??
+                      it['item'] ??
+                      it['food_name'] ??
+                      '')
+                  .toString()
+                  .trim();
+
+          final foodSystemKey = (it['food_system_key'] ?? '').toString().trim();
+
+          int? foodId;
+          if (foodSystemKey.isNotEmpty) {
+            foodId = foodIdBySystemKey[foodSystemKey];
+          }
+          if (foodId == null && rawFoodName.isNotEmpty) {
+            foodId = foodIdByName[norm(rawFoodName)];
+          }
+          if (foodId == null) {
+            continue;
+          }
+
+          final amount = (it['amount'] as num?)?.toDouble() ?? 1;
+          final unit = (it['unit'] ?? 'g').toString().trim();
+          final baseAmount =
+              (it['baseAmount'] as num?)?.toDouble() ??
+              ((unit == 'g' || unit == 'ml') ? 100 : 1);
+
+          await txn.insert('meal_template_items', {
+            'template_id': templateId,
+            'food_id': foodId,
+            'amount': amount,
+            'unit': unit.isEmpty ? 'g' : unit,
+            'base_amount': baseAmount <= 0 ? 1 : baseAmount,
+            'sort_order': sort++,
+          });
+        }
+      }
+
+      if (matchedTemplateIds.isEmpty) {
+        await txn.update('meal_templates', {
+          'is_active': 0,
+        }, where: 'is_system = 1');
+      } else {
+        final args = matchedTemplateIds.toList(growable: false);
+        await txn.update(
+          'meal_templates',
+          {'is_active': 0},
+          where: 'is_system = 1 AND id NOT IN (${placeholders(args.length)})',
+          whereArgs: args,
+        );
+      }
+    });
+
+    await seedSystemServings(db);
   }
 
   // ---------------- FOODS: USER vs SYSTEM ----------------
@@ -463,7 +685,9 @@ class AppDb {
     final q = query?.trim();
     final rows = await d.query(
       'foods',
-      where: (q == null || q.isEmpty) ? 'is_system = 0' : 'is_system = 0 AND name LIKE ?',
+      where: (q == null || q.isEmpty)
+          ? 'is_system = 0'
+          : 'is_system = 0 AND name LIKE ?',
       whereArgs: (q == null || q.isEmpty) ? null : ['%$q%'],
       orderBy: 'name COLLATE NOCASE ASC',
     );
@@ -475,7 +699,9 @@ class AppDb {
     final q = query?.trim();
     final rows = await d.query(
       'foods',
-      where: (q == null || q.isEmpty) ? 'is_system = 1' : 'is_system = 1 AND name LIKE ?',
+      where: (q == null || q.isEmpty)
+          ? 'is_system = 1 AND is_active = 1'
+          : 'is_system = 1 AND is_active = 1 AND name LIKE ?',
       whereArgs: (q == null || q.isEmpty) ? null : ['%$q%'],
       orderBy: 'category COLLATE NOCASE ASC, name COLLATE NOCASE ASC',
     );
@@ -484,7 +710,12 @@ class AppDb {
 
   Future<Food?> getFoodById(int id) async {
     final d = await db;
-    final rows = await d.query('foods', where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await d.query(
+      'foods',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
     return Food.fromMap(rows.first);
   }
@@ -496,7 +727,12 @@ class AppDb {
 
   Future<int> updateFood(Food food) async {
     final d = await db;
-    return d.update('foods', food.toMap(), where: 'id = ?', whereArgs: [food.id]);
+    return d.update(
+      'foods',
+      food.toMap(),
+      where: 'id = ?',
+      whereArgs: [food.id],
+    );
   }
 
   Future<int> deleteFood(int id) async {
@@ -507,7 +743,12 @@ class AppDb {
   Future<int> importSystemFoodToUser(int systemFoodId) async {
     final d = await db;
 
-    final sys = await d.query('foods', where: 'id = ? AND is_system = 1', whereArgs: [systemFoodId], limit: 1);
+    final sys = await d.query(
+      'foods',
+      where: 'id = ? AND is_system = 1',
+      whereArgs: [systemFoodId],
+      limit: 1,
+    );
     if (sys.isEmpty) throw Exception('System food not found');
 
     final name = (sys.first['name'] as String);
@@ -555,7 +796,9 @@ class AppDb {
         time: entry.time,
         label: entry.label,
         entryType: 'manual',
-        manualName: entry.manualName?.trim().isEmpty == true ? 'Manual item' : entry.manualName?.trim(),
+        manualName: entry.manualName?.trim().isEmpty == true
+            ? 'Manual item'
+            : entry.manualName?.trim(),
         manualKcal: entry.manualKcal ?? 0,
         manualProtein: entry.manualProtein ?? 0,
         manualCarbs: entry.manualCarbs ?? 0,
@@ -564,7 +807,8 @@ class AppDb {
       return d.insert('log_entries', e.toMap());
     }
 
-    final hasSnap = entry.foodName != null &&
+    final hasSnap =
+        entry.foodName != null &&
         entry.calories100 != null &&
         entry.protein100 != null &&
         entry.carbs100 != null &&
@@ -635,7 +879,8 @@ class AppDb {
 
   Future<List<Map<String, Object?>>> getLogRowsForDate(String date) async {
     final d = await db;
-    return d.rawQuery('''
+    return d.rawQuery(
+      '''
       SELECT
         le.id as log_id,
         le.grams,
@@ -689,7 +934,9 @@ class AppDb {
         CASE WHEN le.time IS NULL OR le.time = '' THEN 1 ELSE 0 END,
         le.time ASC,
         le.id ASC
-    ''', [date]);
+    ''',
+      [date],
+    );
   }
 
   Future<DayTotals> getTotalsForDate(String date) async {
@@ -738,7 +985,12 @@ class AppDb {
 
   Future<MacroTargets> getTargetsForDate(String date) async {
     final d = await db;
-    final rows = await d.query('day_targets', where: 'date = ?', whereArgs: [date], limit: 1);
+    final rows = await d.query(
+      'day_targets',
+      where: 'date = ?',
+      whereArgs: [date],
+      limit: 1,
+    );
 
     if (rows.isNotEmpty) {
       final r = rows.first;
@@ -765,19 +1017,15 @@ class AppDb {
     String? calculatorJson,
   }) async {
     final d = await db;
-    await d.insert(
-      'day_targets',
-      {
-        'date': date,
-        'calories_target': t.calories,
-        'protein_target': t.protein,
-        'carbs_target': t.carbs,
-        'fat_target': t.fat,
-        'source': source,
-        'calculator_json': calculatorJson,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await d.insert('day_targets', {
+      'date': date,
+      'calories_target': t.calories,
+      'protein_target': t.protein,
+      'carbs_target': t.carbs,
+      'fat_target': t.fat,
+      'source': source,
+      'calculator_json': calculatorJson,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> clearTargetsForDate(String date) async {
@@ -804,7 +1052,11 @@ class AppDb {
 
   Future<void> deleteMealTemplate(int templateId) async {
     final d = await db;
-    await d.delete('meal_template_items', where: 'template_id = ?', whereArgs: [templateId]);
+    await d.delete(
+      'meal_template_items',
+      where: 'template_id = ?',
+      whereArgs: [templateId],
+    );
     await d.delete('meal_templates', where: 'id = ?', whereArgs: [templateId]);
   }
 
@@ -813,7 +1065,9 @@ class AppDb {
     final l = label?.trim();
     final rows = await d.query(
       'meal_templates',
-      where: (l == null || l.isEmpty) ? 'is_system = 0' : 'is_system = 0 AND label = ?',
+      where: (l == null || l.isEmpty)
+          ? 'is_system = 0'
+          : 'is_system = 0 AND label = ?',
       whereArgs: (l == null || l.isEmpty) ? null : [l],
       orderBy: 'label COLLATE NOCASE ASC, name COLLATE NOCASE ASC',
     );
@@ -821,26 +1075,28 @@ class AppDb {
   }
 
   Future<List<MealTemplate>> getSystemMealTemplates({String? query}) async {
-  final d = await db;
-  final q = query?.trim();
+    final d = await db;
+    final q = query?.trim();
 
-  final rows = await d.query(
-    'meal_templates',
-    where: (q == null || q.isEmpty)
-        ? 'is_system = 1'
-        : 'is_system = 1 AND (name LIKE ? OR label LIKE ?)',
-    whereArgs: (q == null || q.isEmpty) ? null : ['%$q%', '%$q%'],
-    orderBy: 'label COLLATE NOCASE ASC, name COLLATE NOCASE ASC',
-  );
+    final rows = await d.query(
+      'meal_templates',
+      where: (q == null || q.isEmpty)
+          ? 'is_system = 1 AND is_active = 1'
+          : 'is_system = 1 AND is_active = 1 AND (name LIKE ? OR label LIKE ?)',
+      whereArgs: (q == null || q.isEmpty) ? null : ['%$q%', '%$q%'],
+      orderBy: 'label COLLATE NOCASE ASC, name COLLATE NOCASE ASC',
+    );
 
-  return rows.map(MealTemplate.fromMap).toList();
-}
+    return rows.map(MealTemplate.fromMap).toList();
+  }
 
-  Future<List<TemplateWithTotals>> getUserMealTemplatesWithTotals({String? label}) async {
-  final d = await db;
-  final l = label?.trim();
+  Future<List<TemplateWithTotals>> getUserMealTemplatesWithTotals({
+    String? label,
+  }) async {
+    final d = await db;
+    final l = label?.trim();
 
-  final rows = await d.rawQuery('''
+    final rows = await d.rawQuery('''
     SELECT
       t.id,
       t.name,
@@ -865,53 +1121,53 @@ class AppDb {
     ORDER BY t.label COLLATE NOCASE ASC, t.name COLLATE NOCASE ASC
   ''', l == null || l.isEmpty ? [] : [l]);
 
-  return rows.map((r) {
-    final template = MealTemplate.fromMap({
-      'id': r['id'],
-      'name': r['name'],
-      'label': r['label'],
-      'created_at': r['created_at'],
-      'is_system': r['is_system'],
-      'system_key': r['system_key'],
-    });
+    return rows.map((r) {
+      final template = MealTemplate.fromMap({
+        'id': r['id'],
+        'name': r['name'],
+        'label': r['label'],
+        'created_at': r['created_at'],
+        'is_system': r['is_system'],
+        'system_key': r['system_key'],
+      });
 
-    final totals = DayTotals(
-      calories: ((r['total_calories'] as num?) ?? 0).toDouble(),
-      protein: ((r['total_protein'] as num?) ?? 0).toDouble(),
-      carbs: ((r['total_carbs'] as num?) ?? 0).toDouble(),
-      fat: ((r['total_fat'] as num?) ?? 0).toDouble(),
-      fiber: ((r['total_fiber'] as num?) ?? 0).toDouble(),
-      sugar: ((r['total_sugar'] as num?) ?? 0).toDouble(),
-      sodium: ((r['total_sodium'] as num?) ?? 0).toDouble(),
-    );
+      final totals = DayTotals(
+        calories: ((r['total_calories'] as num?) ?? 0).toDouble(),
+        protein: ((r['total_protein'] as num?) ?? 0).toDouble(),
+        carbs: ((r['total_carbs'] as num?) ?? 0).toDouble(),
+        fat: ((r['total_fat'] as num?) ?? 0).toDouble(),
+        fiber: ((r['total_fiber'] as num?) ?? 0).toDouble(),
+        sugar: ((r['total_sugar'] as num?) ?? 0).toDouble(),
+        sodium: ((r['total_sodium'] as num?) ?? 0).toDouble(),
+      );
 
-    return TemplateWithTotals(template: template, totals: totals);
-  }).toList();
-}
+      return TemplateWithTotals(template: template, totals: totals);
+    }).toList();
+  }
 
   Future<List<TemplateWithTotals>> getSystemMealTemplatesWithTotals({
-  String? query,
-  String? label,
-}) async {
-  final d = await db;
-  final q = query?.trim();
-  final l = label?.trim();
+    String? query,
+    String? label,
+  }) async {
+    final d = await db;
+    final q = query?.trim();
+    final l = label?.trim();
 
-  final args = <Object?>[];
-  final whereParts = <String>['t.is_system = 1'];
+    final args = <Object?>[];
+    final whereParts = <String>['t.is_system = 1', 't.is_active = 1'];
 
-  if (l != null && l.isNotEmpty) {
-    whereParts.add('t.label = ?');
-    args.add(l);
-  }
+    if (l != null && l.isNotEmpty) {
+      whereParts.add('t.label = ?');
+      args.add(l);
+    }
 
-  if (q != null && q.isNotEmpty) {
-    whereParts.add('(t.name LIKE ? OR t.label LIKE ?)');
-    args.add('%$q%');
-    args.add('%$q%');
-  }
+    if (q != null && q.isNotEmpty) {
+      whereParts.add('(t.name LIKE ? OR t.label LIKE ?)');
+      args.add('%$q%');
+      args.add('%$q%');
+    }
 
-  final rows = await d.rawQuery('''
+    final rows = await d.rawQuery('''
     SELECT
       t.id,
       t.name,
@@ -935,29 +1191,29 @@ class AppDb {
     ORDER BY t.label COLLATE NOCASE ASC, t.name COLLATE NOCASE ASC
   ''', args);
 
-  return rows.map((r) {
-    final template = MealTemplate.fromMap({
-      'id': r['id'],
-      'name': r['name'],
-      'label': r['label'],
-      'created_at': r['created_at'],
-      'is_system': r['is_system'],
-      'system_key': r['system_key'],
-    });
+    return rows.map((r) {
+      final template = MealTemplate.fromMap({
+        'id': r['id'],
+        'name': r['name'],
+        'label': r['label'],
+        'created_at': r['created_at'],
+        'is_system': r['is_system'],
+        'system_key': r['system_key'],
+      });
 
-    final totals = DayTotals(
-      calories: ((r['total_calories'] as num?) ?? 0).toDouble(),
-      protein: ((r['total_protein'] as num?) ?? 0).toDouble(),
-      carbs: ((r['total_carbs'] as num?) ?? 0).toDouble(),
-      fat: ((r['total_fat'] as num?) ?? 0).toDouble(),
-      fiber: ((r['total_fiber'] as num?) ?? 0).toDouble(),
-      sugar: ((r['total_sugar'] as num?) ?? 0).toDouble(),
-      sodium: ((r['total_sodium'] as num?) ?? 0).toDouble(),
-    );
+      final totals = DayTotals(
+        calories: ((r['total_calories'] as num?) ?? 0).toDouble(),
+        protein: ((r['total_protein'] as num?) ?? 0).toDouble(),
+        carbs: ((r['total_carbs'] as num?) ?? 0).toDouble(),
+        fat: ((r['total_fat'] as num?) ?? 0).toDouble(),
+        fiber: ((r['total_fiber'] as num?) ?? 0).toDouble(),
+        sugar: ((r['total_sugar'] as num?) ?? 0).toDouble(),
+        sodium: ((r['total_sodium'] as num?) ?? 0).toDouble(),
+      );
 
-    return TemplateWithTotals(template: template, totals: totals);
-  }).toList();
-}
+      return TemplateWithTotals(template: template, totals: totals);
+    }).toList();
+  }
 
   Future<int> addMealTemplateItem({
     required int templateId,
@@ -983,6 +1239,19 @@ class AppDb {
     await d.delete('meal_template_items', where: 'id = ?', whereArgs: [itemId]);
   }
 
+  Future<void> updateMealTemplateItem({
+    required int itemId,
+    required double amount,
+  }) async {
+    final d = await db;
+    await d.update(
+      'meal_template_items',
+      {'amount': amount},
+      where: 'id = ?',
+      whereArgs: [itemId],
+    );
+  }
+
   Future<List<MealTemplateItem>> getMealTemplateItems(int templateId) async {
     final d = await db;
     final rows = await d.query(
@@ -994,9 +1263,12 @@ class AppDb {
     return rows.map(MealTemplateItem.fromMap).toList();
   }
 
-  Future<List<Map<String, Object?>>> getMealTemplateItemsJoined(int templateId) async {
+  Future<List<Map<String, Object?>>> getMealTemplateItemsJoined(
+    int templateId,
+  ) async {
     final d = await db;
-    return d.rawQuery('''
+    return d.rawQuery(
+      '''
       SELECT
         i.id,
         i.template_id,
@@ -1016,32 +1288,35 @@ class AppDb {
       LEFT JOIN foods f ON f.id = i.food_id
       WHERE i.template_id = ?
       ORDER BY i.sort_order ASC, i.id ASC
-    ''', [templateId]);
+    ''',
+      [templateId],
+    );
   }
 
-  Future<List<TemplateWithTotalsPreview>> getSystemMealTemplatesWithTotalsPreview({
-  String? query,
-  String? label,
-}) async {
-  final d = await db;
-  final q = query?.trim();
-  final l = label?.trim();
+  Future<List<TemplateWithTotalsPreview>>
+  getSystemMealTemplatesWithTotalsPreview({
+    String? query,
+    String? label,
+  }) async {
+    final d = await db;
+    final q = query?.trim();
+    final l = label?.trim();
 
-  final args = <Object?>[];
-  final whereParts = <String>['t.is_system = 1'];
+    final args = <Object?>[];
+    final whereParts = <String>['t.is_system = 1', 't.is_active = 1'];
 
-  if (l != null && l.isNotEmpty) {
-    whereParts.add('t.label = ?');
-    args.add(l);
-  }
+    if (l != null && l.isNotEmpty) {
+      whereParts.add('t.label = ?');
+      args.add(l);
+    }
 
-  if (q != null && q.isNotEmpty) {
-    whereParts.add('(t.name LIKE ? OR t.label LIKE ?)');
-    args.add('%$q%');
-    args.add('%$q%');
-  }
+    if (q != null && q.isNotEmpty) {
+      whereParts.add('(t.name LIKE ? OR t.label LIKE ?)');
+      args.add('%$q%');
+      args.add('%$q%');
+    }
 
-  final rows = await d.rawQuery('''
+    final rows = await d.rawQuery('''
     SELECT
       t.id,
       t.name,
@@ -1084,38 +1359,41 @@ class AppDb {
     ORDER BY t.label COLLATE NOCASE ASC, t.name COLLATE NOCASE ASC
   ''', args);
 
-  return rows.map((r) {
-    final template = MealTemplate.fromMap({
-      'id': r['id'],
-      'name': r['name'],
-      'label': r['label'],
-      'created_at': r['created_at'],
-      'is_system': r['is_system'],
-      'system_key': r['system_key'],
-    });
+    return rows.map((r) {
+      final template = MealTemplate.fromMap({
+        'id': r['id'],
+        'name': r['name'],
+        'label': r['label'],
+        'created_at': r['created_at'],
+        'is_system': r['is_system'],
+        'system_key': r['system_key'],
+      });
 
-    final totals = DayTotals(
-      calories: ((r['total_calories'] as num?) ?? 0).toDouble(),
-      protein: ((r['total_protein'] as num?) ?? 0).toDouble(),
-      carbs: ((r['total_carbs'] as num?) ?? 0).toDouble(),
-      fat: ((r['total_fat'] as num?) ?? 0).toDouble(),
-    );
+      final totals = DayTotals(
+        calories: ((r['total_calories'] as num?) ?? 0).toDouble(),
+        protein: ((r['total_protein'] as num?) ?? 0).toDouble(),
+        carbs: ((r['total_carbs'] as num?) ?? 0).toDouble(),
+        fat: ((r['total_fat'] as num?) ?? 0).toDouble(),
+      );
 
-    return TemplateWithTotalsPreview(
-      template: template,
-      totals: totals,
-      ingredientsPreview: ((r['ingredients_preview'] as String?) ?? 'No items').trim(),
-      itemCount: ((r['item_count'] as num?) ?? 0).toInt(),
-    );
-  }).toList();
-}
+      return TemplateWithTotalsPreview(
+        template: template,
+        totals: totals,
+        ingredientsPreview:
+            ((r['ingredients_preview'] as String?) ?? 'No items').trim(),
+        itemCount: ((r['item_count'] as num?) ?? 0).toInt(),
+      );
+    }).toList();
+  }
 
-  Future<SystemTemplatePreview> getSystemTemplatePreview(int systemTemplateId) async {
+  Future<SystemTemplatePreview> getSystemTemplatePreview(
+    int systemTemplateId,
+  ) async {
     final d = await db;
 
     final tRows = await d.query(
       'meal_templates',
-      where: 'id = ? AND is_system = 1',
+      where: 'id = ? AND is_system = 1 AND is_active = 1',
       whereArgs: [systemTemplateId],
       limit: 1,
     );
@@ -1123,7 +1401,8 @@ class AppDb {
 
     final template = MealTemplate.fromMap(tRows.first);
 
-    final iRows = await d.rawQuery('''
+    final iRows = await d.rawQuery(
+      '''
       SELECT
         i.id as id,
         i.template_id,
@@ -1143,26 +1422,33 @@ class AppDb {
       JOIN foods f ON f.id = i.food_id
       WHERE i.template_id = ?
       ORDER BY i.sort_order ASC, i.id ASC
-    ''', [systemTemplateId]);
+    ''',
+      [systemTemplateId],
+    );
 
     final items = <SystemTemplatePreviewItem>[];
     for (final r in iRows) {
       final name = (r['food_name'] as String?) ?? 'Unknown';
       final amount = ((r['amount'] as num?) ?? 0).toDouble();
 
-      final unit = (r['unit'] as String?) ?? ((r['food_unit'] as String?) ?? 'g');
-      final baseAmount = ((r['base_amount'] as num?) ?? (r['food_base_amount'] as num?) ?? 100).toDouble();
+      final unit =
+          (r['unit'] as String?) ?? ((r['food_unit'] as String?) ?? 'g');
+      final baseAmount =
+          ((r['base_amount'] as num?) ?? (r['food_base_amount'] as num?) ?? 100)
+              .toDouble();
 
-      items.add(SystemTemplatePreviewItem(
-        name: name,
-        amount: amount,
-        unit: unit,
-        baseAmount: baseAmount,
-        caloriesPerBase: ((r['calories'] as num?) ?? 0).toDouble(),
-        proteinPerBase: ((r['protein'] as num?) ?? 0).toDouble(),
-        carbsPerBase: ((r['carbs'] as num?) ?? 0).toDouble(),
-        fatPerBase: ((r['fat'] as num?) ?? 0).toDouble(),
-      ));
+      items.add(
+        SystemTemplatePreviewItem(
+          name: name,
+          amount: amount,
+          unit: unit,
+          baseAmount: baseAmount,
+          caloriesPerBase: ((r['calories'] as num?) ?? 0).toDouble(),
+          proteinPerBase: ((r['protein'] as num?) ?? 0).toDouble(),
+          carbsPerBase: ((r['carbs'] as num?) ?? 0).toDouble(),
+          fatPerBase: ((r['fat'] as num?) ?? 0).toDouble(),
+        ),
+      );
     }
 
     return SystemTemplatePreview(template: template, items: items);
@@ -1185,7 +1471,9 @@ class AppDb {
     final sysT = MealTemplate.fromMap(tRows.first);
 
     final userTemplateId = await d.insert('meal_templates', {
-      'name': (newName?.trim().isNotEmpty == true) ? newName!.trim() : sysT.name,
+      'name': (newName?.trim().isNotEmpty == true)
+          ? newName!.trim()
+          : sysT.name,
       'label': newLabel.trim().isEmpty ? sysT.label : newLabel.trim(),
       'created_at': DateTime.now().toIso8601String(),
       'is_system': 0,
@@ -1218,101 +1506,99 @@ class AppDb {
   }
 
   Future<void> addTemplateToDate({
-  required int templateId,
-  required String date,
-  String? time,
-  String? labelOverride,
-}) async {
-  final d = await db;
+    required int templateId,
+    required String date,
+    String? time,
+    String? labelOverride,
+  }) async {
+    final d = await db;
 
-  final templateRows = await d.query(
-    'meal_templates',
-    where: 'id = ?',
-    whereArgs: [templateId],
-    limit: 1,
-  );
-
-  if (templateRows.isEmpty) {
-    throw Exception('Template not found');
-  }
-
-  final template = MealTemplate.fromMap(templateRows.first);
-  final joined = await getMealTemplateItemsJoined(templateId);
-
-  if (joined.isEmpty) return;
-
-  double calories = 0;
-  double protein = 0;
-  double carbs = 0;
-  double fat = 0;
-
-  for (final row in joined) {
-    final amount = ((row['amount'] as num?) ?? 0).toDouble();
-    final baseAmount = ((row['base_amount'] as num?) ?? 1).toDouble();
-    final safeBase = baseAmount <= 0 ? 1.0 : baseAmount;
-    final factor = amount / safeBase;
-
-    calories += (((row['calories'] as num?) ?? 0).toDouble()) * factor;
-    protein += (((row['protein'] as num?) ?? 0).toDouble()) * factor;
-    carbs += (((row['carbs'] as num?) ?? 0).toDouble()) * factor;
-    fat += (((row['fat'] as num?) ?? 0).toDouble()) * factor;
-  }
-
-  await insertManualLog(
-    date: date,
-    name: template.name,
-    calories: calories,
-    protein: protein,
-    carbs: carbs,
-    fat: fat,
-    time: time,
-    label: (labelOverride?.trim().isNotEmpty == true)
-        ? labelOverride!.trim()
-        : template.label,
-  );
-}
-  Future<void> reseedSystemTemplates() async {
-  final d = await db;
-
-  await d.transaction((txn) async {
-    await txn.delete(
-      'meal_template_items',
-      where: 'template_id IN (SELECT id FROM meal_templates WHERE is_system = 1)',
-    );
-
-    await txn.delete('meal_templates', where: 'is_system = 1');
-
-    await txn.delete('foods', where: 'is_system = 1');
-  });
-
-  await ensureSystemSeeded(d);
-}
-Future<void> reseedSystemLibrary() async {
-  final d = await db;
-
-  await d.transaction((txn) async {
-    // delete template items
-    await txn.delete(
-      'meal_template_items',
-      where: 'template_id IN (SELECT id FROM meal_templates WHERE is_system = 1)',
-    );
-
-    // delete system templates
-    await txn.delete(
+    final templateRows = await d.query(
       'meal_templates',
-      where: 'is_system = 1',
+      where: 'id = ?',
+      whereArgs: [templateId],
+      limit: 1,
     );
 
-    // delete system foods
-    await txn.delete(
-      'foods',
-      where: 'is_system = 1',
-    );
-  });
+    if (templateRows.isEmpty) {
+      throw Exception('Template not found');
+    }
 
-  // seed again
-  await ensureSystemSeeded(d);
-}
+    final template = MealTemplate.fromMap(templateRows.first);
+    final joined = await getMealTemplateItemsJoined(templateId);
+
+    if (joined.isEmpty) return;
+
+    double calories = 0;
+    double protein = 0;
+    double carbs = 0;
+    double fat = 0;
+
+    for (final row in joined) {
+      final amount = ((row['amount'] as num?) ?? 0).toDouble();
+      final baseAmount = ((row['base_amount'] as num?) ?? 1).toDouble();
+      final safeBase = baseAmount <= 0 ? 1.0 : baseAmount;
+      final factor = amount / safeBase;
+
+      calories += (((row['calories'] as num?) ?? 0).toDouble()) * factor;
+      protein += (((row['protein'] as num?) ?? 0).toDouble()) * factor;
+      carbs += (((row['carbs'] as num?) ?? 0).toDouble()) * factor;
+      fat += (((row['fat'] as num?) ?? 0).toDouble()) * factor;
+    }
+
+    await insertManualLog(
+      date: date,
+      name: template.name,
+      calories: calories,
+      protein: protein,
+      carbs: carbs,
+      fat: fat,
+      time: time,
+      label: (labelOverride?.trim().isNotEmpty == true)
+          ? labelOverride!.trim()
+          : template.label,
+    );
+  }
+
+  Future<void> reseedSystemTemplates() async {
+    final d = await db;
+
+    await d.transaction((txn) async {
+      await txn.delete(
+        'meal_template_items',
+        where:
+            'template_id IN (SELECT id FROM meal_templates WHERE is_system = 1)',
+      );
+
+      await txn.delete('meal_templates', where: 'is_system = 1');
+
+      await txn.delete('foods', where: 'is_system = 1');
+    });
+
+    await ensureSystemSeeded(d);
+  }
+
+  Future<void> reseedSystemLibrary() async {
+    final d = await db;
+
+    await d.transaction((txn) async {
+      // delete template items
+      await txn.delete(
+        'meal_template_items',
+        where:
+            'template_id IN (SELECT id FROM meal_templates WHERE is_system = 1)',
+      );
+
+      // delete system templates
+      await txn.delete('meal_templates', where: 'is_system = 1');
+
+      // delete system foods
+      await txn.delete('foods', where: 'is_system = 1');
+    });
+
+    // seed again
+    await ensureSystemSeeded(d);
+  }
   // ---------------- RETENTION ----------------
 
   Future<int> purgeDataOlderThanDays(int days) async {
@@ -1322,7 +1608,11 @@ Future<void> reseedSystemLibrary() async {
     final cutoffStr =
         '${cutoff.year.toString().padLeft(4, '0')}-${cutoff.month.toString().padLeft(2, '0')}-${cutoff.day.toString().padLeft(2, '0')}';
 
-    final deletedLogs = await d.delete('log_entries', where: 'date < ?', whereArgs: [cutoffStr]);
+    final deletedLogs = await d.delete(
+      'log_entries',
+      where: 'date < ?',
+      whereArgs: [cutoffStr],
+    );
     await d.delete('day_targets', where: 'date < ?', whereArgs: [cutoffStr]);
     return deletedLogs;
   }
@@ -1356,5 +1646,95 @@ Future<void> reseedSystemLibrary() async {
     _db = null;
     _opening = null;
     await d?.close();
+  }
+
+  // ---------------- FOOD SERVINGS ----------------
+
+  Future<List<FoodServing>> getFoodServings(int foodId) async {
+    final d = await db;
+    final rows = await d.query(
+      'food_servings',
+      where: 'food_id = ?',
+      whereArgs: [foodId],
+      orderBy: 'id ASC',
+    );
+    return rows.map(FoodServing.fromMap).toList();
+  }
+
+  Future<int> addFoodServing({
+    required int foodId,
+    required String name,
+    required double grams,
+  }) async {
+    final d = await db;
+    return d.insert('food_servings', {
+      'food_id': foodId,
+      'name': name.trim(),
+      'grams': grams,
+    });
+  }
+
+  Future<void> deleteFoodServing(int id) async {
+    final d = await db;
+    await d.delete('food_servings', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Seeds common serving sizes for system foods. Safe to call multiple times.
+  Future<void> seedSystemServings(Database d) async {
+    // Map of system_key → list of (name, grams)
+    const seeds = <String, List<(String, double)>>{
+      'egg_whole':          [('1 egg', 50), ('2 eggs', 100)],
+      'olive_oil':          [('1 tsp', 4.5), ('1 tbsp', 13.5)],
+      'butter':             [('1 tsp', 4.7), ('1 tbsp', 14.2)],
+      'peanut_butter':      [('1 tbsp', 16), ('2 tbsp', 32)],
+      'almonds':            [('10 almonds', 12), ('1 oz (~23)', 28)],
+      'walnuts':            [('7 halves', 28)],
+      'dates_medjool':      [('1 date', 24), ('3 dates', 72)],
+      'oats':               [('½ cup dry', 40), ('1 cup dry', 80)],
+      'milk_whole':         [('½ cup', 120), ('1 cup', 240)],
+      'milk_skim':          [('½ cup', 120), ('1 cup', 240)],
+      'bread_white':        [('1 slice', 30), ('2 slices', 60)],
+      'bread_whole':        [('1 slice', 30), ('2 slices', 60)],
+      'greek_yogurt_nonfat':[('½ cup', 122), ('1 cup', 245)],
+      'greek_yogurt_full':  [('½ cup', 122), ('1 cup', 245)],
+      'cheddar_cheese':     [('1 slice', 28), ('1 oz', 28)],
+      'cottage_cheese':     [('½ cup', 113), ('1 cup', 226)],
+      'rice_white_cooked':  [('½ cup', 93), ('1 cup', 186)],
+      'rice_brown_cooked':  [('½ cup', 98), ('1 cup', 195)],
+      'potato_boiled':      [('1 small', 100), ('1 medium', 150)],
+    };
+
+    for (final entry in seeds.entries) {
+      final key = entry.key;
+      final servings = entry.value;
+
+      // Find food by system_key
+      final rows = await d.query(
+        'foods',
+        columns: ['id'],
+        where: 'system_key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
+      if (rows.isEmpty) continue;
+      final foodId = rows.first['id'] as int;
+
+      // Skip if this food already has servings
+      final existing = await d.query(
+        'food_servings',
+        where: 'food_id = ?',
+        whereArgs: [foodId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) continue;
+
+      for (final s in servings) {
+        await d.insert('food_servings', {
+          'food_id': foodId,
+          'name': s.$1,
+          'grams': s.$2,
+        });
+      }
+    }
   }
 }

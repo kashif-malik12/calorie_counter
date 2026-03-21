@@ -13,6 +13,7 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'data/db.dart';
 import 'data/models.dart';
+import 'services/food_search.dart';
 import 'settings/target_settings.dart';
 import 'settings/retention_settings.dart';
 
@@ -211,6 +212,60 @@ class _HomeShellState extends State<HomeShell> {
     ];
 
     return Scaffold(
+      drawer: Drawer(
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const DrawerHeader(
+                child: Text(
+                  'CalorieFit',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.help_outline),
+                title: const Text('Ask Question'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const _UpcomingFeaturePage(title: 'Ask Question'),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.groups_outlined),
+                title: const Text('Join Group Classes'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const _UpcomingFeaturePage(title: 'Join Group Classes'),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_search_outlined),
+                title: const Text('Find Personal Coach'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const _UpcomingFeaturePage(title: 'Find Personal Coach'),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
       body: pages[_idx],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _idx,
@@ -218,7 +273,7 @@ class _HomeShellState extends State<HomeShell> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
           NavigationDestination(icon: Icon(Icons.restaurant_menu), label: 'My Foods'),
-          NavigationDestination(icon: Icon(Icons.public), label: 'Global'),
+          NavigationDestination(icon: Icon(Icons.menu_book), label: 'Library'),
           NavigationDestination(icon: Icon(Icons.calendar_month), label: 'History'),
         ],
       ),
@@ -229,6 +284,15 @@ class _HomeShellState extends State<HomeShell> {
 // ---------------- Shared helpers ----------------
 
 String _fmtDate(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
+
+const _kMealCategories = [
+  'Breakfast',
+  'Morning Snack',
+  'Lunch',
+  'Afternoon Snack',
+  'Dinner',
+  'Post Dinner Snack',
+];
 
 String _baseLabel(Food f) {
   final u = f.unit;
@@ -370,10 +434,52 @@ DataRow _macroRow(String name, double taken, int target, String unit) {
   );
 }
 
-Widget _progressBarCalories({required int taken, required int target}) {
+Widget _progressBarCalories({
+  required int taken,
+  required int target,
+  required DayTotals totals,
+  required MacroTargets targets,
+}) {
   final safeTarget = target <= 0 ? 1 : target;
   final progress = (taken / safeTarget).clamp(0.0, 1.0);
   final over = taken - safeTarget;
+
+  Widget macroBar({
+    required String label,
+    required double value,
+    required double targetVal,
+    required Color color,
+  }) {
+    final safeT = targetVal <= 0 ? 1.0 : targetVal;
+    final p = (value / safeT).clamp(0.0, 1.0);
+    final valStr = value.toStringAsFixed(0);
+    final tgtStr = targetVal.toStringAsFixed(0);
+    return Row(
+      children: [
+        SizedBox(
+          width: 14,
+          child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: p,
+              minHeight: 6,
+              color: color,
+              backgroundColor: color.withOpacity(0.15),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$valStr/$tgtStr g',
+          style: const TextStyle(fontSize: 11, color: Colors.black54),
+        ),
+      ],
+    );
+  }
 
   return Card(
     child: Padding(
@@ -381,30 +487,120 @@ Widget _progressBarCalories({required int taken, required int target}) {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Calories progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('$taken / $safeTarget kcal', style: const TextStyle(fontWeight: FontWeight.w600)),
+              const Text('Calories', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
               Text(
-                over <= 0 ? '${safeTarget - taken} left' : '$over over',
+                over <= 0 ? '${safeTarget - taken} kcal left' : '$over kcal over',
                 style: TextStyle(
+                  fontSize: 13,
                   color: over <= 0 ? Colors.green : Colors.red,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('$taken kcal', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              Text('/ $safeTarget', style: const TextStyle(fontSize: 14, color: Colors.black45)),
             ],
           ),
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(value: progress, minHeight: 12),
+            child: LinearProgressIndicator(value: progress, minHeight: 10),
+          ),
+          const SizedBox(height: 14),
+          macroBar(
+            label: 'P',
+            value: totals.protein,
+            targetVal: targets.protein.toDouble(),
+            color: const Color(0xFF4CAF50),
+          ),
+          const SizedBox(height: 6),
+          macroBar(
+            label: 'C',
+            value: totals.carbs,
+            targetVal: targets.carbs.toDouble(),
+            color: const Color(0xFF2196F3),
+          ),
+          const SizedBox(height: 6),
+          macroBar(
+            label: 'F',
+            value: totals.fat,
+            targetVal: targets.fat.toDouble(),
+            color: const Color(0xFFFF9800),
           ),
         ],
       ),
     ),
   );
+}
+
+List<Widget> _buildCategorizedLog(
+  List<Map<String, Object?>> rows,
+  VoidCallback onDelete,
+) {
+  // Group rows by label; rows are already sorted by time from the DB
+  final Map<String, List<Map<String, Object?>>> grouped = {};
+  for (final r in rows) {
+    final label = (r['label'] as String?)?.trim();
+    final key = (label != null && label.isNotEmpty) ? label : 'Other';
+    grouped.putIfAbsent(key, () => []).add(r);
+  }
+
+  final result = <Widget>[];
+
+  void addSection(String cat) {
+    final entries = grouped[cat];
+    if (entries == null || entries.isEmpty) return;
+
+    result.add(Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      child: Row(
+        children: [
+          Text(
+            cat,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Divider(thickness: 1)),
+        ],
+      ),
+    ));
+
+    for (final r in entries) {
+      final logId = r['log_id'] as int;
+      final name = (r['name'] as String?) ?? 'Unknown';
+      final subtitle = _logSubtitleFromRow(r);
+      result.add(Card(
+        child: ListTile(
+          isThreeLine: true,
+          title: Text(name),
+          subtitle: Text(subtitle),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () async {
+              await AppDb.instance.deleteLog(logId);
+              onDelete();
+            },
+          ),
+        ),
+      ));
+    }
+  }
+
+  for (final cat in _kMealCategories) {
+    addSection(cat);
+  }
+  // Any entry with an unrecognised or missing label
+  addSection('Other');
+
+  return result;
 }
 
 Widget _targetsTable({required DayTotals totals, required MacroTargets targets}) {
@@ -875,6 +1071,15 @@ class _TodayPageState extends State<TodayPage> {
                 await _addFromTemplates();
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.travel_explore),
+              title: const Text('Search online & log'),
+              subtitle: const Text('Find nutrition from USDA database'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _searchOnlineAndLog();
+              },
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -883,157 +1088,222 @@ class _TodayPageState extends State<TodayPage> {
   }
 
   Future<void> _addLogEntryFromFoods() async {
+    Food? selected;
+    final amountCtrl = TextEditingController(text: '1');
+    final searchCtrl = TextEditingController();
+    String selectedLabel = 'Breakfast';
+    TimeOfDay selectedTime = TimeOfDay.now();
+
+    // Phase 1: pick a food
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (ctx) {
-        Food? selected;
-        final amountCtrl = TextEditingController(text: '1');
-        final searchCtrl = TextEditingController();
-
-        String selectedLabel = 'Breakfast';
-        TimeOfDay selectedTime = TimeOfDay.now();
-
         return SafeArea(
           child: Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 16,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             child: StatefulBuilder(
               builder: (ctx, setInner) {
-                final unitSuffix = selected?.unit ?? 'g';
-
-                return SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text('Add what you ate', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                          ),
-                          IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
-                        ],
-                      ),
-                      TextField(
-                        controller: searchCtrl,
-                        decoration: const InputDecoration(labelText: 'Search My Foods', prefixIcon: Icon(Icons.search)),
-                        onChanged: (_) => setInner(() {}),
-                      ),
-                      const SizedBox(height: 10),
-                      FutureBuilder<List<Food>>(
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Select food', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                        ),
+                        IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: searchCtrl,
+                      autofocus: true,
+                      decoration: const InputDecoration(labelText: 'Search My Foods', prefixIcon: Icon(Icons.search)),
+                      onChanged: (_) => setInner(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: FutureBuilder<List<Food>>(
                         future: AppDb.instance.getUserFoods(query: searchCtrl.text.trim()),
                         builder: (ctx, snap) {
                           if (snap.connectionState == ConnectionState.waiting) {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Center(child: CircularProgressIndicator()),
-                            );
+                            return const Center(child: CircularProgressIndicator());
                           }
                           final list = snap.data ?? const <Food>[];
                           if (list.isEmpty) {
                             return const Padding(
                               padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Text('No foods found. Add foods in My Foods or import from Global.'),
+                              child: Text('No foods found. Add foods in My Foods or import from Library.'),
                             );
                           }
-                          return SizedBox(
-                            height: 240,
-                            child: ListView.builder(
-                              itemCount: list.length,
-                              itemBuilder: (_, i) {
-                                final f = list[i];
-                                final isSel = selected?.id == f.id;
-                                return ListTile(
-                                  isThreeLine: true,
-                                  title: Text(f.name),
-                                  subtitle: Text(_foodListSubtitle(f)),
-                                  trailing: isSel ? const Icon(Icons.check_circle) : null,
-                                  onTap: () => setInner(() => selected = f),
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: selectedLabel,
-                        decoration: const InputDecoration(labelText: 'Label', prefixIcon: Icon(Icons.sell_outlined)),
-                        items: const [
-                          DropdownMenuItem(value: 'Breakfast', child: Text('Breakfast')),
-                          DropdownMenuItem(value: 'Lunch', child: Text('Lunch')),
-                          DropdownMenuItem(value: 'Dinner', child: Text('Dinner')),
-                          DropdownMenuItem(value: 'Snack', child: Text('Snack')),
-                        ],
-                        onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(child: Text('Time: ${_fmtTime(selectedTime)}', style: const TextStyle(fontWeight: FontWeight.w600))),
-                          TextButton.icon(
-                            icon: const Icon(Icons.access_time),
-                            label: const Text('Pick'),
-                            onPressed: () async {
-                              final picked = await showTimePicker(context: ctx, initialTime: selectedTime);
-                              if (picked != null) setInner(() => selectedTime = picked);
+                          return ListView.builder(
+                            itemCount: list.length,
+                            itemBuilder: (_, i) {
+                              final f = list[i];
+                              return ListTile(
+                                isThreeLine: true,
+                                title: Text(f.name),
+                                subtitle: Text(_foodListSubtitle(f)),
+                                onTap: () {
+                                  selected = f;
+                                  Navigator.pop(ctx);
+                                },
+                              );
                             },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: amountCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Amount eaten',
-                          suffixText: unitSuffix,
-                          helperText: selected == null ? null : 'Nutrition is ${_baseLabel(selected!)}',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: () async {
-                          final f = selected;
-                          if (f == null) return;
-
-                          final amount = double.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? 0;
-                          if (amount <= 0) return;
-
-                          await AppDb.instance.insertLog(
-                            LogEntry(
-                              date: _date,
-                              foodId: f.id,
-                              grams: amount,
-                              unit: f.unit,
-                              baseAmount: f.baseAmount,
-                              label: selectedLabel,
-                              time: _fmtTime(selectedTime),
-                              foodName: f.name,
-                              calories100: f.calories,
-                              protein100: f.protein,
-                              carbs100: f.carbs,
-                              fat100: f.fat,
-                              entryType: 'food',
-                            ),
                           );
-
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (mounted) setState(() {});
                         },
-                        child: const Text('Add'),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 );
               },
             ),
           ),
+        );
+      },
+    );
+
+    // Nothing selected — user dismissed
+    if (selected == null || !mounted) return;
+
+    // Phase 2: enter amount, category, time
+    final servings = await AppDb.instance.getFoodServings(selected!.id!);
+
+    if (!mounted) return;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setInner) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 24,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            selected!.name,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _addLogEntryFromFoods();
+                          },
+                          child: const Text('Change'),
+                        ),
+                        IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                      ],
+                    ),
+                    Text(
+                      _foodListSubtitle(selected!),
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                    if (servings.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      const Text('Quick serving', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: servings.map((s) {
+                          return ActionChip(
+                            label: Text(s.name),
+                            onPressed: () => setInner(() {
+                              amountCtrl.text = s.grams
+                                  .toStringAsFixed(s.grams == s.grams.roundToDouble() ? 0 : 1);
+                            }),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: amountCtrl,
+                      autofocus: servings.isEmpty,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: 'Amount eaten',
+                        suffixText: selected!.unit,
+                        helperText: 'Nutrition is ${_baseLabel(selected!)}',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: selectedLabel,
+                      decoration: const InputDecoration(labelText: 'Meal category', prefixIcon: Icon(Icons.sell_outlined)),
+                      items: _kMealCategories
+                          .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                          .toList(),
+                      onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('Time: ${_fmtTime(selectedTime)}',
+                              style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ),
+                        TextButton.icon(
+                          icon: const Icon(Icons.access_time),
+                          label: const Text('Pick'),
+                          onPressed: () async {
+                            final picked = await showTimePicker(context: ctx, initialTime: selectedTime);
+                            if (picked != null) setInner(() => selectedTime = picked);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () async {
+                        final f = selected!;
+                        final amount = double.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+                        if (amount <= 0) return;
+
+                        await AppDb.instance.insertLog(
+                          LogEntry(
+                            date: _date,
+                            foodId: f.id,
+                            grams: amount,
+                            unit: f.unit,
+                            baseAmount: f.baseAmount,
+                            label: selectedLabel,
+                            time: _fmtTime(selectedTime),
+                            foodName: f.name,
+                            calories100: f.calories,
+                            protein100: f.protein,
+                            carbs100: f.carbs,
+                            fat100: f.fat,
+                            entryType: 'food',
+                          ),
+                        );
+
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) setState(() {});
+                      },
+                      child: const Text('Add'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -1097,12 +1367,9 @@ class _TodayPageState extends State<TodayPage> {
                       labelText: 'Label',
                       prefixIcon: Icon(Icons.sell_outlined),
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'Breakfast', child: Text('Breakfast')),
-                      DropdownMenuItem(value: 'Lunch', child: Text('Lunch')),
-                      DropdownMenuItem(value: 'Dinner', child: Text('Dinner')),
-                      DropdownMenuItem(value: 'Snack', child: Text('Snack')),
-                    ],
+                    items: _kMealCategories
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
                     onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
                   ),
                   const SizedBox(height: 10),
@@ -1203,6 +1470,7 @@ class _TodayPageState extends State<TodayPage> {
       useSafeArea: true,
       builder: (ctx) {
         TimeOfDay selectedTime = TimeOfDay.now();
+        String selectedLabel = 'Breakfast';
 
         return SafeArea(
           child: Padding(
@@ -1222,6 +1490,15 @@ class _TodayPageState extends State<TodayPage> {
                       const Expanded(child: Text('Add from My Templates', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600))),
                       IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: selectedLabel,
+                    decoration: const InputDecoration(labelText: 'Meal category', prefixIcon: Icon(Icons.sell_outlined)),
+                    items: _kMealCategories
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -1299,7 +1576,7 @@ class _TodayPageState extends State<TodayPage> {
                                     templateId: t.id!,
                                     date: _date,
                                     time: _fmtTime(selectedTime),
-                                    labelOverride: t.label,
+                                    labelOverride: selectedLabel,
                                   );
                                   if (ctx.mounted) Navigator.pop(ctx);
                                   if (mounted) setState(() {});
@@ -1328,6 +1605,149 @@ class _TodayPageState extends State<TodayPage> {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _searchOnlineAndLog() async {
+    // Step 1: search
+    final result = await showFoodSearchSheet(context);
+    if (result == null || !mounted) return;
+
+    // Step 2: enter amount, category, time and log
+    final amountCtrl = TextEditingController(text: '100');
+    String selectedLabel = 'Breakfast';
+    TimeOfDay selectedTime = TimeOfDay.now();
+    bool saveToMyFoods = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) => Padding(
+          padding: EdgeInsets.only(
+            left: 16, right: 16, top: 24,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(result.name,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                    ),
+                    IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                  ],
+                ),
+                Text(result.macroSummary,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                const SizedBox(height: 16),
+                // Quick serving chips
+                Wrap(
+                  spacing: 8,
+                  children: [50, 100, 150, 200].map((g) {
+                    return ActionChip(
+                      label: Text('${g}g'),
+                      onPressed: () => setInner(() => amountCtrl.text = g.toString()),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: amountCtrl,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Amount eaten',
+                    suffixText: 'g',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedLabel,
+                  decoration: const InputDecoration(
+                      labelText: 'Meal category',
+                      prefixIcon: Icon(Icons.sell_outlined)),
+                  items: _kMealCategories
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) => setInner(() => selectedLabel = v ?? 'Breakfast'),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Time: ${_fmtTime(selectedTime)}',
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.access_time),
+                      label: const Text('Pick'),
+                      onPressed: () async {
+                        final picked = await showTimePicker(
+                            context: ctx, initialTime: selectedTime);
+                        if (picked != null) setInner(() => selectedTime = picked);
+                      },
+                    ),
+                  ],
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Also save to My Foods'),
+                  value: saveToMyFoods,
+                  onChanged: (v) => setInner(() => saveToMyFoods = v),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: () async {
+                    final grams = double.tryParse(
+                            amountCtrl.text.trim().replaceAll(',', '.')) ??
+                        0;
+                    if (grams <= 0) return;
+
+                    // Log as manual entry with the searched nutrition, scaled
+                    final factor = grams / 100.0;
+                    await AppDb.instance.insertManualLog(
+                      date: _date,
+                      name: result.name,
+                      calories: result.calories * factor,
+                      protein: result.protein * factor,
+                      carbs: result.carbs * factor,
+                      fat: result.fat * factor,
+                      time: _fmtTime(selectedTime),
+                      label: selectedLabel,
+                    );
+
+                    if (saveToMyFoods) {
+                      await AppDb.instance.insertFood(Food(
+                        name: result.name,
+                        calories: result.calories,
+                        protein: result.protein,
+                        carbs: result.carbs,
+                        fat: result.fat,
+                        fiber: result.fiber,
+                        sugar: result.sugar,
+                        sodium: result.sodium,
+                        unit: 'g',
+                        baseAmount: 100,
+                        isSystem: false,
+                      ));
+                    }
+
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    if (mounted) setState(() {});
+                  },
+                  child: const Text('Log'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1446,7 +1866,7 @@ class _TodayPageState extends State<TodayPage> {
   ),
 ),
 const SizedBox(height: 12),
-                _progressBarCalories(taken: totals.calories.round(), target: targets.calories),
+                _progressBarCalories(taken: totals.calories.round(), target: targets.calories, totals: totals, targets: targets),
                 const SizedBox(height: 12),
                 _targetsTable(totals: totals, targets: targets),
                 const SizedBox(height: 12),
@@ -1471,27 +1891,7 @@ const SizedBox(height: 12),
                     padding: EdgeInsets.symmetric(vertical: 24),
                     child: Center(child: Text('No entries yet. Tap + to add what you ate.')),
                   )
-                else
-                  ...rows.map((r) {
-                    final logId = r['log_id'] as int;
-                    final name = (r['name'] as String?) ?? 'Unknown';
-                    final subtitle = _logSubtitleFromRow(r);
-
-                    return Card(
-                      child: ListTile(
-                        isThreeLine: true,
-                        title: Text(name),
-                        subtitle: Text(subtitle),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () async {
-                            await AppDb.instance.deleteLog(logId);
-                            if (mounted) setState(() {});
-                          },
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                else ..._buildCategorizedLog(rows, () => setState(() {})),
               ],
             );
           },
@@ -1528,8 +1928,54 @@ class _FoodsPageState extends State<FoodsPage> {
     final sodiumCtrl = TextEditingController(text: (existing?.sodium ?? 0).toString());
 
     String selectedUnit = existing?.unit ?? 'g';
+    List<FoodServing> servings = existing?.id != null
+        ? await AppDb.instance.getFoodServings(existing!.id!)
+        : [];
 
     double parseNum(TextEditingController c) => double.tryParse(c.text.trim().replaceAll(',', '.')) ?? 0;
+
+    Future<void> addServing(StateSetter setInner, int foodId) async {
+      final nameCtrl2 = TextEditingController();
+      final gramsCtrl = TextEditingController();
+      await showDialog(
+        context: context,
+        builder: (ctx2) => AlertDialog(
+          title: const Text('Add serving size'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl2,
+                decoration: const InputDecoration(labelText: 'Name (e.g. 1 tbsp, 1 egg)'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: gramsCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Amount in $selectedUnit',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx2), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                final n = nameCtrl2.text.trim();
+                final g = double.tryParse(gramsCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+                if (n.isEmpty || g <= 0) return;
+                await AppDb.instance.addFoodServing(foodId: foodId, name: n, grams: g);
+                final updated = await AppDb.instance.getFoodServings(foodId);
+                setInner(() => servings = updated);
+                if (ctx2.mounted) Navigator.pop(ctx2);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      );
+    }
 
     await showDialog(
       context: context,
@@ -1542,7 +1988,28 @@ class _FoodsPageState extends State<FoodsPage> {
             title: Text(existing == null ? 'Add food ($baseLabel)' : 'Edit food ($baseLabel)'),
             content: SingleChildScrollView(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.travel_explore),
+                    label: const Text('Search online to fill nutrition'),
+                    onPressed: () async {
+                      final result = await showFoodSearchSheet(context);
+                      if (result == null) return;
+                      setInner(() {
+                        nameCtrl.text = result.name;
+                        calsCtrl.text = result.calories.toStringAsFixed(1);
+                        protCtrl.text = result.protein.toStringAsFixed(1);
+                        carbCtrl.text = result.carbs.toStringAsFixed(1);
+                        fatCtrl.text = result.fat.toStringAsFixed(1);
+                        fiberCtrl.text = result.fiber.toStringAsFixed(1);
+                        sugarCtrl.text = result.sugar.toStringAsFixed(1);
+                        sodiumCtrl.text = result.sodium.toStringAsFixed(0);
+                        selectedUnit = 'g';
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
                   TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
@@ -1565,6 +2032,39 @@ class _FoodsPageState extends State<FoodsPage> {
                   TextField(controller: fiberCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fiber (g)')),
                   TextField(controller: sugarCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sugar (g)')),
                   TextField(controller: sodiumCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sodium (mg)')),
+                  if (existing?.id != null) ...[
+                    const SizedBox(height: 14),
+                    const Divider(),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Serving sizes', style: TextStyle(fontWeight: FontWeight.w600)),
+                        ),
+                        TextButton.icon(
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Add'),
+                          onPressed: () => addServing(setInner, existing!.id!),
+                        ),
+                      ],
+                    ),
+                    if (servings.isEmpty)
+                      const Text('No serving sizes yet.', style: TextStyle(fontSize: 12, color: Colors.black54))
+                    else
+                      Wrap(
+                        spacing: 6,
+                        children: servings.map((s) {
+                          return Chip(
+                            label: Text('${s.name} (${s.grams.toStringAsFixed(s.grams == s.grams.roundToDouble() ? 0 : 1)} $selectedUnit)'),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () async {
+                              await AppDb.instance.deleteFoodServing(s.id!);
+                              final updated = await AppDb.instance.getFoodServings(existing!.id!);
+                              setInner(() => servings = updated);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -1592,7 +2092,20 @@ class _FoodsPageState extends State<FoodsPage> {
                   );
 
                   if (existing == null) {
-                    await AppDb.instance.insertFood(food);
+                    final newId = await AppDb.instance.insertFood(food);
+                    // Open again to allow adding servings
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    if (mounted) {
+                      setState(() {});
+                      await _openFoodForm(existing: Food(
+                        id: newId, name: food.name, calories: food.calories,
+                        protein: food.protein, carbs: food.carbs, fat: food.fat,
+                        fiber: food.fiber, sugar: food.sugar, sodium: food.sodium,
+                        unit: food.unit, baseAmount: food.baseAmount,
+                        isSystem: false, category: food.category,
+                      ));
+                    }
+                    return;
                   } else {
                     await AppDb.instance.updateFood(food);
                   }
@@ -1676,7 +2189,7 @@ class _FoodsPageState extends State<FoodsPage> {
   }
 }
 
-// ---------------- GLOBAL PAGE ----------------
+// ---------------- LIBRARY PAGE ----------------
 
 class GlobalPage extends StatefulWidget {
   const GlobalPage({super.key});
@@ -1698,7 +2211,7 @@ class _GlobalPageState extends State<GlobalPage> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const BrandedAppBarTitle(title: 'Global'),
+        title: const BrandedAppBarTitle(title: 'Library'),
         bottom: TabBar(
           controller: _tab,
           tabs: const [
@@ -2335,6 +2848,83 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
     );
   }
 
+  Future<void> _editTemplateItem(MealTemplateItem item, Food? food) async {
+    if (item.id == null) return;
+    final amountCtrl = TextEditingController(
+      text: item.amount.toStringAsFixed(
+        item.amount == item.amount.roundToDouble() ? 0 : 1,
+      ),
+    );
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        food?.name ?? 'Edit Food',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountCtrl,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Amount',
+                    suffixText: item.unit,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () async {
+                    final amount = double.tryParse(
+                          amountCtrl.text.trim().replaceAll(',', '.'),
+                        ) ??
+                        0;
+                    if (amount <= 0) return;
+                    await AppDb.instance.updateMealTemplateItem(
+                      itemId: item.id!,
+                      amount: amount,
+                    );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    if (mounted) setState(() {});
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<List<Map<String, Object?>>> _loadJoinedItems() async {
     return AppDb.instance.getMealTemplateItemsJoined(widget.templateId);
   }
@@ -2431,14 +3021,24 @@ class _TemplateEditPageState extends State<TemplateEditPage> {
                         fat: fat,
                       )}',
                     ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () async {
-                        if (it.id == null) return;
-                        await AppDb.instance.deleteMealTemplateItem(it.id!);
-                        if (mounted) setState(() {});
-                      },
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () => _editTemplateItem(it, food),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () async {
+                            if (it.id == null) return;
+                            await AppDb.instance.deleteMealTemplateItem(it.id!);
+                            if (mounted) setState(() {});
+                          },
+                        ),
+                      ],
                     ),
+                    onTap: () => _editTemplateItem(it, food),
                   ),
                 );
               }).toList(),
@@ -2540,7 +3140,7 @@ class _HistoryPageState extends State<HistoryPage> {
 
             return ListView(
               children: [
-                _progressBarCalories(taken: totals.calories.round(), target: targets.calories),
+                _progressBarCalories(taken: totals.calories.round(), target: targets.calories, totals: totals, targets: targets),
                 const SizedBox(height: 12),
                 _targetsTable(totals: totals, targets: targets),
                 const SizedBox(height: 12),
@@ -2575,6 +3175,157 @@ class _HistoryPageState extends State<HistoryPage> {
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------- ONLINE FOOD SEARCH ----------------
+
+/// Shows an online food search sheet and returns the selected result, or null.
+Future<FoodSearchResult?> showFoodSearchSheet(BuildContext context) {
+  return showModalBottomSheet<FoodSearchResult>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => const _FoodSearchSheet(),
+  );
+}
+
+class _FoodSearchSheet extends StatefulWidget {
+  const _FoodSearchSheet();
+
+  @override
+  State<_FoodSearchSheet> createState() => _FoodSearchSheetState();
+}
+
+class _FoodSearchSheetState extends State<_FoodSearchSheet> {
+  final _searchCtrl = TextEditingController();
+  List<FoodSearchResult>? _results;
+  bool _loading = false;
+  String? _error;
+
+  Future<void> _search() async {
+    final q = _searchCtrl.text.trim();
+    if (q.isEmpty) return;
+    setState(() { _loading = true; _error = null; _results = null; });
+    try {
+      final results = await searchFoodsOnline(q);
+      if (mounted) setState(() { _results = results; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = 'Search failed. Check internet connection.'; _loading = false; });
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16, right: 16, top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Search Food Online',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const Text(
+            'Powered by USDA FoodData Central  •  values per 100 g',
+            style: TextStyle(fontSize: 11, color: Colors.black45),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  autofocus: true,
+                  textInputAction: TextInputAction.search,
+                  decoration: const InputDecoration(
+                    labelText: 'e.g. chicken breast, olive oil, egg',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onSubmitted: (_) => _search(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: _loading ? null : _search, child: const Text('Go')),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (_loading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(child: Center(child: Text(_error!, style: const TextStyle(color: Colors.red))))
+          else if (_results == null)
+            const Expanded(child: Center(child: Text('Type a food name and tap Go.')))
+          else if (_results!.isEmpty)
+            const Expanded(child: Center(child: Text('No results found. Try different keywords.')))
+          else
+            Expanded(
+              child: ListView.builder(
+                itemCount: _results!.length,
+                itemBuilder: (_, i) {
+                  final r = _results![i];
+                  return ListTile(
+                    isThreeLine: true,
+                    title: Text(r.name),
+                    subtitle: Text(r.macroSummary),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.pop(context, r),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------- UPCOMING FEATURE PAGE ----------------
+
+class _UpcomingFeaturePage extends StatelessWidget {
+  final String title;
+  const _UpcomingFeaturePage({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.rocket_launch_outlined, size: 64, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 16),
+            const Text(
+              'Upcoming Feature',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Stay tuned — this is coming soon!',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ],
         ),
       ),
     );

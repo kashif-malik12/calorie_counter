@@ -267,6 +267,34 @@ class MealTemplateItem {
   }
 }
 
+class FoodServing {
+  final int? id;
+  final int foodId;
+  final String name;   // e.g. "1 tbsp", "1 egg", "½ cup"
+  final double grams;  // equivalent amount in food's base unit
+
+  const FoodServing({
+    this.id,
+    required this.foodId,
+    required this.name,
+    required this.grams,
+  });
+
+  Map<String, Object?> toMap() => {
+    if (id != null) 'id': id,
+    'food_id': foodId,
+    'name': name,
+    'grams': grams,
+  };
+
+  static FoodServing fromMap(Map<String, Object?> m) => FoodServing(
+    id: (m['id'] as num?)?.toInt(),
+    foodId: (m['food_id'] as num).toInt(),
+    name: m['name'] as String,
+    grams: ((m['grams'] as num?) ?? 0).toDouble(),
+  );
+}
+
 class DayTotals {
   final double calories;
   final double protein;
